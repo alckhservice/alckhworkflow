@@ -24,6 +24,8 @@
     --pine-soft:#e4ede9;
     --amber:#b8842e;
     --amber-soft:#f5e8d2;
+    --yellow:#e8c31a;
+    --yellow-deep:#b3970a;
     --rust:#a5482f;
     --rust-soft:#f3e0da;
     --r-sm:8px;
@@ -318,7 +320,7 @@
     background:var(--paper-raised);
   }
   .chk:hover{border-color:var(--pine);}
-  .chk.done{background:var(--pine); border-color:var(--pine); color:#fff;}
+  .chk.done{background:var(--yellow); border-color:var(--yellow-deep); color:#3a2f00;}
   .chk.readonly{cursor:default;}
   .chk.readonly:hover{border-color:var(--line);}
 
@@ -333,7 +335,7 @@
     cursor:pointer;
     min-width:96px;
   }
-  .statusSel.done{background:var(--pine); border-color:var(--pine); color:#fff;}
+  .statusSel.done{background:var(--yellow); border-color:var(--yellow-deep); color:#3a2f00;}
   .statusSel.na{background:var(--brass); border-color:var(--brass-deep); color:#fff;}
   .statusSel:disabled{cursor:default; opacity:.8;}
 
@@ -507,7 +509,9 @@ const COLS = [
   {key:'invadj', label:'Inventory Adj'},
   {key:'salary', label:'Salary'},
   {key:'bankrec', label:'Bank reconcile'},
-  {key:'efiling', label:'E-filing'}
+  {key:'efiling', label:'E-filing'},
+  {key:'bill_sent', label:'Separate Bill'},
+  {key:'tax_payment', label:'Tax Payment'}
 ];
 
 const DEFAULT_DATA = [{"name": "1 - KONDA FURNITURE CO., LTD.", "import_": true, "export": true, "gp1": true, "gp2": true, "vat0": true, "fa": true, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": true, "efiling": true}, {"name": "2 - UNITED PROSPER LOGISTICS (CAMBODIA) CO., LTD.", "import_": true, "export": true, "gp1": true, "gp2": true, "vat0": true, "fa": true, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": true, "efiling": true}, {"name": "3 - NEW PHOENIX DEVELOPMENT INDUSTRY CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "4 - NEWPROKIN (CAMBODIA) CO.,LTD", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "5 - GRACE CRAFT LIGHTING CO., LTD", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "6 - YUE WING CHEONG MANUFACTORY CO., LTD", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "7 - PRANCE LIGHTING CO.,LTD", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "8 - INSPIROR BAG (CAMBODIA) MANUFACTURING CO., LTD", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "9 - XIN XINGLE LEATHER PRODUCTS CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "10 - LITESUN HOMEDECOR CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "11 - ALCKH SERVICES SOLUTION (CAMBODIA) CO., LTD.", "import_": true, "export": true, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "12 - TW LIGHTS CO., LTD", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "13 - YOU JUST FOOTWEAR (CAMBODIA) CO., LTD", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "14 - SHENGSHI XITANG IMPORT & EXPORT TRADING (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "15 - XING KUN DA LEATHER INDUSTRIAL CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "16 - PIONEER BRILLIANCE (CAMBODIA) CO.,LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "18 - EVERLUCK OUTDOOR PRODUCTS (CAMBODIA) CO., LTD", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "19 - AMFC SERVICES CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "20 - DC SAFETY MANUFACTURING (CAMBODIA) CO., LTD. (NEW)", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "21 - MASTER FREIGHT (CAMBODIA) Co., Ltd.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "22 - QI MAN MAO YI CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "23 - RICHBAGS (CAMBODIA) CO.,LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "17 - LAMUES TECHNOLOGY CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "24 - XINKAIDA LIGHTING CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "25 - SKY XIE YING (CAMBODIA) PACKING CO.,LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": false, "efiling": true}, {"name": "26 - HENGSHU INDUSTRIAL MANUFACTURING CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "27 - JUN YIP INTERNATIONAL (CAMBODIA) CO., LTD", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "28 - MEREDITH (CAMBODIA) COMPANY LIMITED", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "29 - MEISEN HANDBAG (CAMBODIA) TECHNOLOGY CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "30 - JUNSHENG ANTAI CONSTRUCTION CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "31 - CHUANG YI PACKING (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "32 - NOR SI KANG RENEWABLE RESOURCES CO., LTD", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "33 - CHONG TAI INDUSTRIAL (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "34 - GUANSHENG SHOES MATERIALS (CAMBODIA) CO., LTD", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "35 - PRIME STORAGE SOLUTION (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "36 - LEIFORT FURNITURE CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "37 - MEIJIA BUILDING MATERIALS FURNITURE TRADING CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": false, "efiling": true}, {"name": "38 - BLANK", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "39 - SUNLONG SPORTS (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "40 - NEW PENGTAI SHOES (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "41 - LEMASI PRODUCTS (CAMBODIA) CO.,LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "42 - HENGJU ALUMINUM ELECTRICITY CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "43 - HAO TAI KATDERSOMLEKBOMPEAK", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "44 - CHAMPEI FURNITURE (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "45 - TEXSSEL (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "46 - HENYUE OUTDOOR (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "47 - GRANDYIELD LIGHTING CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "48 - CNF INDUSTRY & TRADING (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "49 - EMILIYA (CAMBODIA) ELECTRICAL APPLIANCES CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": true}, {"name": "50 - HONGBANG ADHESIVE TECHNOLOGY (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "51 - MING HONG SHOES (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "52 - HUAYI", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "53 - LING SHENG SPORT (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "54 - WAH LAI (CAMBODIA) FOOTWEAR CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "55 - LONGWIN FURNITURE (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "56 - KAHNLAND TECHNOLOGY (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "57 - GUTENWIN (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": true, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "58 - BANSHAN BLUE SEA(CAMBODIA) REAL ESTATE DEVELOPMENT CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "59 - FOCUS ONE INTERNATIONAL LOGISTICS (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "60 - X.R. LIRONG INTERNATIONAL CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "61 - RUNPU (CAMBODIA) STORAGE SHELF EQUIPMENT CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "62 - SINOBOMEN (CAMBODIA) PACKAGING CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "63 - XINGCHI SEWING TRADING CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "64 - ALLNICE INDUSTRIES (CAMBODIA) CO., LTD", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": true}, {"name": "66 - DC SAFETY MANUFACTURING (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "67 - ECAM KING SHIPPING (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "68 - HE SHENG SHOE MATERIAL (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "69 - JIAGUANG PLASTIC (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "70 - NEW DEVELOP HENGJI SHOES (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "71 - XINGYAODA HARDWARE ACCESSORIES CO., LTD", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "72 - YADUO GUEST HOUSE CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "73 - JASON PAPER PACKAGING CO.,LTD", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "74 - U.BABY JOY (CAMBODIA) NURSERY TECHNO CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "75 - ALKAR MECHANICAL TECHNOLOGY CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "76 - LHYXION INTERNATIONAL CO.,LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "77 - JUST KEEP HEALTHY CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "78 - BESTFINE (CAMBODIA) SWIMMING APPLIANCES CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "79 - SHUNZHANG (CAMBODIA)", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "80 - SYNST (CAMBODIA) ELECTRONICS TECHNOLOGY CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "81 - JIANG MINGTAI (CAMBODIA) HOME TEXTILE CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "82 - JIESHIMEI (CAMBODIA) INDUSTRIAL CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": true, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "83 - GUARDMED HEALTHCARE KH CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "85 - ACE-TECH SPORTS ENTERPRISE CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "84 - JIAYUCHHENG LEATHER PRODUCTS CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": true, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "86 - ZHENDE XINCUN MATERIAL CO., LTD.", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "87 - WANTAI BAG (CAMBODIA) CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "88 - TIEN TAO CAMBODIA CHARITY ASSOCIATION", "import_": false, "export": false, "gp1": true, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "89 - SUPER WIN INTERNATIONAL INDUSTRIES CO., LTD.", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": true, "bankrec": false, "efiling": false}, {"name": "90 - ETERNAL", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}, {"name": "91 - IDE TRADE COMPANY LIMITED", "import_": false, "export": false, "gp1": false, "gp2": false, "vat0": false, "fa": false, "sales0cmt": false, "invadj": false, "salary": false, "bankrec": false, "efiling": false}]
@@ -622,13 +626,21 @@ function currentRows(){ return state.months[state.current].rows; }
 function isLatestMonth(){ return state.order[state.order.length-1] === state.current; }
 function isLocked(){ return !isLatestMonth() && !state.locked[state.current]; }
 
+const DROPDOWN_COLS = {
+  import_: {no:'No Import', yes:'Done', pending:true},
+  export: {no:'No Export', yes:'Done', pending:true},
+  bill_sent: {no:'Not Yet Sent', yes:'Sent', pending:false},
+  tax_payment: {no:'Unpaid', yes:'Paid', pending:false}
+};
+
 function rowProgress(row){
   let total = 0, done = 0;
   COLS.forEach(function(c){
     const v = row[c.key];
     if(v === 'na') return; // Pending — excluded entirely from completion %
     total++;
-    const isStatusCol = (c.key === 'import_' || c.key === 'export');
+    const dd = DROPDOWN_COLS[c.key];
+    const isStatusCol = !!(dd && dd.pending);
     if(isStatusCol || v) done++; // for Import/Export, both Done and No Import/No Export count as settled
   });
   return total > 0 ? (done / total) : 1;
@@ -685,15 +697,14 @@ function render(){
 
     let tds = '<td class="name"><input value="' + escapeAttr(row.name) + '" data-idx="' + idx + '" data-field="name" ' + (locked?'disabled':'') + '></td>';
     COLS.forEach(c => {
-      if(c.key === 'import_' || c.key === 'export'){
-        const noLabel = c.key === 'import_' ? 'No Import' : 'No Export';
+      const dd = DROPDOWN_COLS[c.key];
+      if(dd){
         const v = row[c.key];
-        const cls = v === 'na' ? 'na' : 'done';
-        tds += '<td><select class="statusSel ' + cls + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked?'disabled':'') + '>'
-             + '<option value="false"' + (v !== true && v !== 'na' ? ' selected':'') + '>' + noLabel + '</option>'
-             + '<option value="true"' + (v === true ? ' selected':'') + '>Done</option>'
-             + '<option value="na"' + (v === 'na' ? ' selected':'') + '>Pending</option>'
-             + '</select></td>';
+        const cls = v === 'na' ? 'na' : (v === true ? 'done' : (dd.pending ? 'done' : ''));
+        let opts = '<option value="false"' + (v !== true && v !== 'na' ? ' selected':'') + '>' + dd.no + '</option>'
+                 + '<option value="true"' + (v === true ? ' selected':'') + '>' + dd.yes + '</option>';
+        if(dd.pending) opts += '<option value="na"' + (v === 'na' ? ' selected':'') + '>Pending</option>';
+        tds += '<td><select class="statusSel ' + cls + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked?'disabled':'') + '>' + opts + '</select></td>';
       } else {
         tds += '<td><span class="chk ' + (row[c.key] ? 'done':'') + ' ' + (locked?'readonly':'') + '" data-idx="' + idx + '" data-field="' + c.key + '">' + (row[c.key] ? '&#10003;':'') + '</span></td>';
       }
@@ -816,7 +827,7 @@ document.getElementById('btnNewMonth').addEventListener('click', function(){
   const baseRows = state.months[state.order[state.order.length-1]].rows;
   const rows = baseRows.map(function(r){
     const nr = {name:r.name};
-    COLS.forEach(function(c){ nr[c.key] = (c.key === 'import_' || c.key === 'export') ? 'na' : false; });
+    COLS.forEach(function(c){ nr[c.key] = (DROPDOWN_COLS[c.key] && DROPDOWN_COLS[c.key].pending) ? 'na' : false; });
     return nr;
   });
   state.months[clean] = {rows: rows};
@@ -853,7 +864,7 @@ function nextMonthGuess(label){
 function addRow(){
   if(isLocked()) return;
   const emptyRow = {name: 'New Company'};
-  COLS.forEach(function(c){ emptyRow[c.key] = (c.key === 'import_' || c.key === 'export') ? 'na' : false; });
+  COLS.forEach(function(c){ emptyRow[c.key] = (DROPDOWN_COLS[c.key] && DROPDOWN_COLS[c.key].pending) ? 'na' : false; });
   currentRows().push(emptyRow);
   render();
 }
@@ -868,13 +879,16 @@ document.getElementById('btnExport').addEventListener('click', function(){
   aoa.push([null,null,null,null,null,null,null,null,null,null,null,'Overall',
     Math.round((rows.reduce(function(s,r){return s+rowProgress(r);},0)/(rows.length||1))*10000)/10000]);
   aoa.push([]);
-  aoa.push(['Company','PCA',null,'BK',null,null,null,null,null,null,null,'TAX','Progess']);
-  aoa.push([null,'Import','Export','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','E-filling',null]);
+  aoa.push(['Company','PCA',null,'BK',null,null,null,null,null,null,null,'TAX',null,null,'Progess']);
+  aoa.push([null,'Import','Export','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','E-filling','Separate Bill','Tax Payment',null]);
   rows.forEach(function(row){
     const line = [row.name];
     COLS.forEach(function(c){
       const v = row[c.key];
-      line.push(v === 'na' ? 'Pending' : (v ? 'Done' : ''));
+      const dd = DROPDOWN_COLS[c.key];
+      if(v === 'na'){ line.push('Pending'); }
+      else if(dd){ line.push(v ? dd.yes : dd.no); }
+      else{ line.push(v ? 'Done' : ''); }
     });
     line.push(Math.round(rowProgress(row)*10000)/10000);
     aoa.push(line);
@@ -882,9 +896,10 @@ document.getElementById('btnExport').addEventListener('click', function(){
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!merges'] = [
     {s:{r:2,c:1},e:{r:2,c:2}},
-    {s:{r:2,c:3},e:{r:2,c:10}}
+    {s:{r:2,c:3},e:{r:2,c:10}},
+    {s:{r:2,c:11},e:{r:2,c:13}}
   ];
-  ws['!cols'] = [{wch:52}].concat(new Array(11).fill({wch:11})).concat([{wch:10}]);
+  ws['!cols'] = [{wch:52}].concat(new Array(13).fill({wch:11})).concat([{wch:10}]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, state.current.slice(0,31) || 'Schedule');
   const fname = ('ALCKH_' + state.current).replace(/[^a-z0-9 _-]/gi,'') + '.xlsx';
@@ -896,7 +911,7 @@ document.getElementById('btnClearAll').addEventListener('click', function(){
   const monthLabel = state.current;
   if(!confirm('Clear all reported status for every company in ' + monthLabel + '?\n\nThis resets Import, Export, and every checkbox back to blank for this month. Company names and rows stay — only the tick marks/status are cleared. This cannot be undone.')) return;
   currentRows().forEach(function(row){
-    COLS.forEach(function(c){ row[c.key] = (c.key === 'import_' || c.key === 'export') ? 'na' : false; });
+    COLS.forEach(function(c){ row[c.key] = (DROPDOWN_COLS[c.key] && DROPDOWN_COLS[c.key].pending) ? 'na' : false; });
   });
   render();
 });
@@ -924,7 +939,14 @@ document.getElementById('fileInput').addEventListener('change', function(e){
         COLS.forEach(function(c, i){
           const v = line[1+i];
           const s = v ? String(v).trim().toLowerCase() : '';
-          row[c.key] = (s === 'n/a' || s === 'na' || s === 'pending') ? 'na' : (s === 'done');
+          const dd = DROPDOWN_COLS[c.key];
+          if(dd && dd.pending && (s === 'n/a' || s === 'na' || s === 'pending')){
+            row[c.key] = 'na';
+          } else if(dd){
+            row[c.key] = s === dd.yes.toLowerCase();
+          } else {
+            row[c.key] = (s === 'done');
+          }
         });
         newRows.push(row);
       }
