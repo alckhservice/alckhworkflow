@@ -325,6 +325,11 @@
   .sortBtn:hover{color:var(--ink); border-color:var(--pine);}
   .sortBtn.disabled{opacity:.35; cursor:default; pointer-events:none;}
   thead tr.cols th.prog-h{width:100px;}
+  thead tr.cols th.grouppct-h{width:56px; background:rgba(47,93,79,0.06);}
+  td.grouppct{font-family:var(--mono); font-size:11.5px; font-weight:600; background:rgba(47,93,79,0.04);}
+  td.grouppct.full{color:var(--pine);}
+  td.grouppct.zero{color:var(--rust);}
+  td.grouppct.mid{color:var(--amber);}
   tbody td{padding:7px 6px; text-align:center; border-bottom:1px solid var(--line); font-size:13px;}
   tbody tr:hover{background:rgba(250,248,242,0.7);}
   tbody tr:focus-within{
@@ -521,9 +526,9 @@
       <thead>
         <tr class="grp">
           <th class="first"></th>
-          <th colspan="2">PCA</th>
-          <th colspan="8">BK</th>
-          <th colspan="3">TAX</th>
+          <th colspan="3">PCA</th>
+          <th colspan="9">BK</th>
+          <th colspan="4">TAX</th>
           <th></th>
           <th></th>
         </tr>
@@ -531,6 +536,7 @@
           <th class="name-h">Company <span class="sortBtn" id="sortAsc" title="Sort ascending (1→99)">&#9650;</span><span class="sortBtn" id="sortDesc" title="Sort descending (99→1)">&#9660;</span></th>
           <th>Import</th>
           <th>Export</th>
+          <th class="grouppct-h">PCA %</th>
           <th>G.P<br>(13.14.15)</th>
           <th>G.P<br>(16.17.18.27)</th>
           <th>VAT 0%</th>
@@ -539,16 +545,18 @@
           <th>Inventory<br>Adj</th>
           <th>Salary</th>
           <th>Bank<br>reconcile</th>
+          <th class="grouppct-h">BK %</th>
           <th>E-filing</th>
           <th>Separate<br>Bill</th>
           <th>Tax<br>Payment</th>
+          <th class="grouppct-h">TAX %</th>
           <th class="prog-h">Progress</th>
           <th></th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
       <tfoot>
-        <tr><td colspan="16"><button class="addrow-btn" id="btnAddRow2">+ add another company row</button></td></tr>
+        <tr><td colspan="19"><button class="addrow-btn" id="btnAddRow2">+ add another company row</button></td></tr>
       </tfoot>
     </table>
     </div>
@@ -810,6 +818,11 @@ function render(){
     else if(prog <= 0.001) tr.className = 'zero';
 
     let tds = '<td class="name"><input value="' + escapeAttr(row.name) + '" data-idx="' + idx + '" data-field="name" ' + (locked?'disabled':'') + '></td>';
+    function groupPctCell(p){
+      const pct = Math.round(p*100);
+      const cls = pct >= 100 ? 'full' : (pct <= 0 ? 'zero' : 'mid');
+      return '<td class="grouppct ' + cls + '">' + pct + '%</td>';
+    }
     COLS.forEach(c => {
       const dd = DROPDOWN_COLS[c.key];
       if(dd){
@@ -822,6 +835,9 @@ function render(){
       } else {
         tds += '<td><span class="chk ' + (row[c.key] ? 'done':'') + ' ' + (locked?'readonly':'') + '" data-idx="' + idx + '" data-field="' + c.key + '">' + (row[c.key] ? '&#10003;':'') + '</span></td>';
       }
+      if(c.key === 'export') tds += groupPctCell(groupProgress(row, GROUPS.pca));
+      else if(c.key === 'bankrec') tds += groupPctCell(groupProgress(row, GROUPS.bk));
+      else if(c.key === 'tax_payment') tds += groupPctCell(groupProgress(row, GROUPS.tax));
     });
     const pctDisplay = Math.round(prog*100);
     tds += '<td class="prog"><div class="progcell"><div class="bar"><span style="width:' + pctDisplay + '%"></span></div><span class="pct">' + pctDisplay + '%</span></div></td>';
@@ -1012,8 +1028,8 @@ document.getElementById('btnExport').addEventListener('click', function(){
   aoa.push([null,null,null,null,null,null,null,null,null,null,null,'Overall',
     Math.round((rows.reduce(function(s,r){return s+rowProgress(r);},0)/(rows.length||1))*10000)/10000]);
   aoa.push([]);
-  aoa.push(['Company','PCA',null,'BK',null,null,null,null,null,null,null,'TAX',null,null,'Progess']);
-  aoa.push([null,'Import','Export','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','E-filling','Separate Bill','Tax Payment',null]);
+  aoa.push(['Company','PCA',null,null,'BK',null,null,null,null,null,null,null,null,'TAX',null,null,null,'Progess']);
+  aoa.push([null,'Import','Export','PCA %','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','BK %','E-filling','Separate Bill','Tax Payment','TAX %',null]);
   rows.forEach(function(row){
     const line = [row.name];
     COLS.forEach(function(c){
@@ -1022,17 +1038,20 @@ document.getElementById('btnExport').addEventListener('click', function(){
       if(v === 'na'){ line.push('Pending'); }
       else if(dd){ line.push(v ? dd.yes : dd.no); }
       else{ line.push(v ? 'Done' : ''); }
+      if(c.key === 'export') line.push(Math.round(groupProgress(row, GROUPS.pca)*10000)/10000);
+      else if(c.key === 'bankrec') line.push(Math.round(groupProgress(row, GROUPS.bk)*10000)/10000);
+      else if(c.key === 'tax_payment') line.push(Math.round(groupProgress(row, GROUPS.tax)*10000)/10000);
     });
     line.push(Math.round(rowProgress(row)*10000)/10000);
     aoa.push(line);
   });
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!merges'] = [
-    {s:{r:2,c:1},e:{r:2,c:2}},
-    {s:{r:2,c:3},e:{r:2,c:10}},
-    {s:{r:2,c:11},e:{r:2,c:13}}
+    {s:{r:2,c:1},e:{r:2,c:3}},
+    {s:{r:2,c:4},e:{r:2,c:12}},
+    {s:{r:2,c:13},e:{r:2,c:16}}
   ];
-  ws['!cols'] = [{wch:52}].concat(new Array(13).fill({wch:11})).concat([{wch:10}]);
+  ws['!cols'] = [{wch:52}].concat(new Array(16).fill({wch:11})).concat([{wch:10}]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, state.current.slice(0,31) || 'Schedule');
   const fname = ('ALCKH_' + state.current).replace(/[^a-z0-9 _-]/gi,'') + '.xlsx';
@@ -1069,8 +1088,10 @@ document.getElementById('fileInput').addEventListener('change', function(e){
         const line = aoa[r];
         if(!line || !line[0]) continue;
         const row = {name: String(line[0]).trim()};
-        COLS.forEach(function(c, i){
-          const v = line[1+i];
+        let col = 1;
+        COLS.forEach(function(c){
+          const v = line[col];
+          col++;
           const s = v ? String(v).trim().toLowerCase() : '';
           const dd = DROPDOWN_COLS[c.key];
           if(dd && dd.pending && (s === 'n/a' || s === 'na' || s === 'pending')){
@@ -1080,6 +1101,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
           } else {
             row[c.key] = (s === 'done');
           }
+          if(c.key === 'export' || c.key === 'bankrec' || c.key === 'tax_payment') col++; // skip the computed % column
         });
         newRows.push(row);
       }
