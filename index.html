@@ -816,7 +816,7 @@ document.getElementById('btnNewMonth').addEventListener('click', function(){
   const baseRows = state.months[state.order[state.order.length-1]].rows;
   const rows = baseRows.map(function(r){
     const nr = {name:r.name};
-    COLS.forEach(function(c){ nr[c.key] = false; });
+    COLS.forEach(function(c){ nr[c.key] = (c.key === 'import_' || c.key === 'export') ? 'na' : false; });
     return nr;
   });
   state.months[clean] = {rows: rows};
@@ -853,7 +853,7 @@ function nextMonthGuess(label){
 function addRow(){
   if(isLocked()) return;
   const emptyRow = {name: 'New Company'};
-  COLS.forEach(function(c){ emptyRow[c.key] = false; });
+  COLS.forEach(function(c){ emptyRow[c.key] = (c.key === 'import_' || c.key === 'export') ? 'na' : false; });
   currentRows().push(emptyRow);
   render();
 }
@@ -896,7 +896,7 @@ document.getElementById('btnClearAll').addEventListener('click', function(){
   const monthLabel = state.current;
   if(!confirm('Clear all reported status for every company in ' + monthLabel + '?\n\nThis resets Import, Export, and every checkbox back to blank for this month. Company names and rows stay — only the tick marks/status are cleared. This cannot be undone.')) return;
   currentRows().forEach(function(row){
-    COLS.forEach(function(c){ row[c.key] = false; });
+    COLS.forEach(function(c){ row[c.key] = (c.key === 'import_' || c.key === 'export') ? 'na' : false; });
   });
   render();
 });
