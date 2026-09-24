@@ -334,7 +334,7 @@
     min-width:96px;
   }
   .statusSel.done{background:var(--pine); border-color:var(--pine); color:#fff;}
-  .statusSel.na{background:var(--paper); border-color:var(--line); color:var(--ink-soft); font-style:italic;}
+  .statusSel.na{background:var(--brass); border-color:var(--brass-deep); color:#fff;}
   .statusSel:disabled{cursor:default; opacity:.8;}
 
   td.prog{padding-right:16px;}
@@ -626,9 +626,10 @@ function rowProgress(row){
   let total = 0, done = 0;
   COLS.forEach(function(c){
     const v = row[c.key];
-    if(v === 'na') return; // N/A is excluded entirely — not pending, not done
+    if(v === 'na') return; // Pending — excluded entirely from completion %
     total++;
-    if(v) done++;
+    const isStatusCol = (c.key === 'import_' || c.key === 'export');
+    if(isStatusCol || v) done++; // for Import/Export, both Done and No Import/No Export count as settled
   });
   return total > 0 ? (done / total) : 1;
 }
@@ -687,11 +688,11 @@ function render(){
       if(c.key === 'import_' || c.key === 'export'){
         const noLabel = c.key === 'import_' ? 'No Import' : 'No Export';
         const v = row[c.key];
-        const cls = v === true ? 'done' : (v === 'na' ? 'na' : '');
+        const cls = v === 'na' ? 'na' : 'done';
         tds += '<td><select class="statusSel ' + cls + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked?'disabled':'') + '>'
              + '<option value="false"' + (v !== true && v !== 'na' ? ' selected':'') + '>' + noLabel + '</option>'
              + '<option value="true"' + (v === true ? ' selected':'') + '>Done</option>'
-             + '<option value="na"' + (v === 'na' ? ' selected':'') + '>N/A</option>'
+             + '<option value="na"' + (v === 'na' ? ' selected':'') + '>Pending</option>'
              + '</select></td>';
       } else {
         tds += '<td><span class="chk ' + (row[c.key] ? 'done':'') + ' ' + (locked?'readonly':'') + '" data-idx="' + idx + '" data-field="' + c.key + '">' + (row[c.key] ? '&#10003;':'') + '</span></td>';
@@ -873,7 +874,7 @@ document.getElementById('btnExport').addEventListener('click', function(){
     const line = [row.name];
     COLS.forEach(function(c){
       const v = row[c.key];
-      line.push(v === 'na' ? 'N/A' : (v ? 'Done' : ''));
+      line.push(v === 'na' ? 'Pending' : (v ? 'Done' : ''));
     });
     line.push(Math.round(rowProgress(row)*10000)/10000);
     aoa.push(line);
@@ -923,7 +924,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
         COLS.forEach(function(c, i){
           const v = line[1+i];
           const s = v ? String(v).trim().toLowerCase() : '';
-          row[c.key] = (s === 'n/a' || s === 'na') ? 'na' : (s === 'done');
+          row[c.key] = (s === 'n/a' || s === 'na' || s === 'pending') ? 'na' : (s === 'done');
         });
         newRows.push(row);
       }
