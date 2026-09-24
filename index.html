@@ -334,6 +334,7 @@
     min-width:96px;
   }
   .statusSel.done{background:var(--pine); border-color:var(--pine); color:#fff;}
+  .statusSel.na{background:var(--paper); border-color:var(--line); color:var(--ink-soft); font-style:italic;}
   .statusSel:disabled{cursor:default; opacity:.8;}
 
   td.prog{padding-right:16px;}
@@ -446,6 +447,7 @@
     <button class="btn ghost" id="btnImport">Import Excel</button>
     <input type="file" id="fileInput" accept=".xlsx,.xls">
     <button class="btn ghost" id="btnExport">Export Excel</button>
+    <button class="btn danger" id="btnClearAll">Clear All Data</button>
     <button class="btn" id="btnPrint">Print</button>
   </div>
 
@@ -621,8 +623,14 @@ function isLatestMonth(){ return state.order[state.order.length-1] === state.cur
 function isLocked(){ return !isLatestMonth() && !state.locked[state.current]; }
 
 function rowProgress(row){
-  const done = COLS.filter(c => row[c.key]).length;
-  return done / COLS.length;
+  let total = 0, done = 0;
+  COLS.forEach(function(c){
+    const v = row[c.key];
+    if(v === 'na') return; // N/A is excluded entirely — not pending, not done
+    total++;
+    if(v) done++;
+  });
+  return total > 0 ? (done / total) : 1;
 }
 
 function populateMonthSelect(){
@@ -678,9 +686,12 @@ function render(){
     COLS.forEach(c => {
       if(c.key === 'import_' || c.key === 'export'){
         const noLabel = c.key === 'import_' ? 'No Import' : 'No Export';
-        tds += '<td><select class="statusSel ' + (row[c.key] ? 'done':'') + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked?'disabled':'') + '>'
-             + '<option value="false"' + (!row[c.key] ? ' selected':'') + '>' + noLabel + '</option>'
-             + '<option value="true"' + (row[c.key] ? ' selected':'') + '>Done</option>'
+        const v = row[c.key];
+        const cls = v === true ? 'done' : (v === 'na' ? 'na' : '');
+        tds += '<td><select class="statusSel ' + cls + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked?'disabled':'') + '>'
+             + '<option value="false"' + (v !== true && v !== 'na' ? ' selected':'') + '>' + noLabel + '</option>'
+             + '<option value="true"' + (v === true ? ' selected':'') + '>Done</option>'
+             + '<option value="na"' + (v === 'na' ? ' selected':'') + '>N/A</option>'
              + '</select></td>';
       } else {
         tds += '<td><span class="chk ' + (row[c.key] ? 'done':'') + ' ' + (locked?'readonly':'') + '" data-idx="' + idx + '" data-field="' + c.key + '">' + (row[c.key] ? '&#10003;':'') + '</span></td>';
@@ -707,6 +718,7 @@ function render(){
   document.getElementById('btnAddRow').disabled = locked;
   document.getElementById('btnAddRow2').style.display = locked ? 'none' : 'inline';
   document.getElementById('btnImport').disabled = locked;
+  document.getElementById('btnClearAll').disabled = locked;
 
   populateMonthSelect();
   attachRowEvents();
@@ -731,7 +743,7 @@ function attachRowEvents(){
     el.addEventListener('change', function(){
       const idx = +el.dataset.idx;
       const field = el.dataset.field;
-      currentRows()[idx][field] = (el.value === 'true');
+      currentRows()[idx][field] = (el.value === 'na') ? 'na' : (el.value === 'true');
       render();
     });
   });
@@ -859,7 +871,10 @@ document.getElementById('btnExport').addEventListener('click', function(){
   aoa.push([null,'Import','Export','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','E-filling',null]);
   rows.forEach(function(row){
     const line = [row.name];
-    COLS.forEach(function(c){ line.push(row[c.key] ? 'Done' : ''); });
+    COLS.forEach(function(c){
+      const v = row[c.key];
+      line.push(v === 'na' ? 'N/A' : (v ? 'Done' : ''));
+    });
     line.push(Math.round(rowProgress(row)*10000)/10000);
     aoa.push(line);
   });
@@ -873,6 +888,16 @@ document.getElementById('btnExport').addEventListener('click', function(){
   XLSX.utils.book_append_sheet(wb, ws, state.current.slice(0,31) || 'Schedule');
   const fname = ('ALCKH_' + state.current).replace(/[^a-z0-9 _-]/gi,'') + '.xlsx';
   XLSX.writeFile(wb, fname);
+});
+
+document.getElementById('btnClearAll').addEventListener('click', function(){
+  if(isLocked()) return;
+  const monthLabel = state.current;
+  if(!confirm('Clear all reported status for every company in ' + monthLabel + '?\n\nThis resets Import, Export, and every checkbox back to blank for this month. Company names and rows stay — only the tick marks/status are cleared. This cannot be undone.')) return;
+  currentRows().forEach(function(row){
+    COLS.forEach(function(c){ row[c.key] = false; });
+  });
+  render();
 });
 
 document.getElementById('btnImport').addEventListener('click', function(){
@@ -897,7 +922,8 @@ document.getElementById('fileInput').addEventListener('change', function(e){
         const row = {name: String(line[0]).trim()};
         COLS.forEach(function(c, i){
           const v = line[1+i];
-          row[c.key] = !!(v && String(v).trim().toLowerCase() === 'done');
+          const s = v ? String(v).trim().toLowerCase() : '';
+          row[c.key] = (s === 'n/a' || s === 'na') ? 'na' : (s === 'done');
         });
         newRows.push(row);
       }
