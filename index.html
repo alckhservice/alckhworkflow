@@ -338,6 +338,17 @@
     padding-left:18px;
     font-weight:500;
     white-space:nowrap;
+    position:relative;
+  }
+  tbody tr:hover td.name::before{
+    content:'';
+    position:absolute;
+    left:4px;
+    top:50%;
+    transform:translateY(-50%);
+    border-top:5px solid transparent;
+    border-bottom:5px solid transparent;
+    border-left:7px solid var(--pine);
   }
   tbody td.name input{
     border:none;
