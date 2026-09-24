@@ -498,9 +498,6 @@
     <div class="stat complete"><div class="n" id="statComplete">0</div><div class="l">FULLY DONE (11/11)</div></div>
     <div class="stat progress"><div class="n" id="statProgress">0</div><div class="l">IN PROGRESS</div></div>
     <div class="stat notstarted"><div class="n" id="statZero">0</div><div class="l">NOT STARTED</div></div>
-    <div class="stat notstarted"><div class="n" id="statZeroPCA">0</div><div class="l">PCA NOT STARTED</div></div>
-    <div class="stat notstarted"><div class="n" id="statZeroBK">0</div><div class="l">BK NOT STARTED</div></div>
-    <div class="stat notstarted"><div class="n" id="statZeroTAX">0</div><div class="l">TAX NOT STARTED</div></div>
     <div class="stat progress"><div class="n" id="statPendingPCA">0</div><div class="l">PCA PENDING</div></div>
     <div class="stat progress"><div class="n" id="statPendingBK">0</div><div class="l">BK PENDING</div></div>
     <div class="stat progress"><div class="n" id="statPendingTAX">0</div><div class="l">TAX PENDING</div></div>
@@ -787,7 +784,7 @@ function render(){
   tbody.innerHTML = '';
 
   let total=0, complete=0, zero=0, inprog=0, sumProg=0;
-  let zeroPCA=0, zeroBK=0, zeroTAX=0, pendingPCA=0, pendingBK=0, pendingTAX=0;
+  let pendingPCA=0, pendingBK=0, pendingTAX=0;
 
   rows.forEach((row, idx) => {
     const prog = rowProgress(row);
@@ -799,10 +796,6 @@ function render(){
     const pcaPct = groupProgress(row, GROUPS.pca);
     const bkPct = groupProgress(row, GROUPS.bk);
     const taxPct = groupProgress(row, GROUPS.tax);
-    if(pcaPct <= 0.001) zeroPCA++;
-    if(bkPct <= 0.001) zeroBK++;
-    if(taxPct <= 0.001) zeroTAX++;
-
     if(pcaPct < 0.999) pendingPCA++;
     if(bkPct < 0.999) pendingBK++;
     if(taxPct < 0.999) pendingTAX++;
@@ -849,9 +842,6 @@ function render(){
   document.getElementById('statComplete').textContent = complete;
   document.getElementById('statProgress').textContent = inprog;
   document.getElementById('statZero').textContent = zero;
-  document.getElementById('statZeroPCA').textContent = zeroPCA;
-  document.getElementById('statZeroBK').textContent = zeroBK;
-  document.getElementById('statZeroTAX').textContent = zeroTAX;
   document.getElementById('statPendingPCA').textContent = pendingPCA;
   document.getElementById('statPendingBK').textContent = pendingBK;
   document.getElementById('statPendingTAX').textContent = pendingTAX;
