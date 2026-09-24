@@ -555,6 +555,7 @@ try{ db.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e){}
 const docRef = db.collection('alckh_working_flow_report').doc('shared_state');
 
 let applyingRemote = false; // guard to stop remote updates from re-triggering a write
+let initialSyncDone = false; // guard to stop the very first render (using this device's own local cache) from pushing over the real cloud data before we've actually heard from the cloud
 let saveTimer = null;
 
 function setSyncStatus(text){
@@ -564,6 +565,7 @@ function setSyncStatus(text){
 
 function pushToCloud(){
   if(applyingRemote) return;
+  if(!initialSyncDone) return; // never push this device's local/starting copy until it has been reconciled with the cloud at least once
   clearTimeout(saveTimer);
   setSyncStatus('Syncing…');
   saveTimer = setTimeout(()=>{
@@ -580,11 +582,12 @@ function startCloudSync(){
   docRef.onSnapshot((snap)=>{
     if(!snap.exists){
       // No cloud copy yet — seed it with whatever we have locally.
+      initialSyncDone = true;
       pushToCloud();
       setSyncStatus('Synced ✓ (first sync)');
       return;
     }
-    if(snap.metadata.hasPendingWrites) return; // this is our own just-sent write, ignore
+    if(snap.metadata.hasPendingWrites){ initialSyncDone = true; return; } // this is our own just-sent write, ignore
     const remote = snap.data();
     if(remote && remote.months && remote.order && remote.order.length){
       applyingRemote = true;
@@ -595,8 +598,10 @@ function startCloudSync(){
       applyingRemote = false;
       setSyncStatus('Synced ✓');
     }
+    initialSyncDone = true;
   }, (err)=>{
     console.error('Firestore listen failed', err);
+    initialSyncDone = true; // give up waiting for the cloud so this device can at least keep working (and saving) locally
     setSyncStatus('Offline — using last saved copy on this device');
   });
 }
