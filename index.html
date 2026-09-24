@@ -322,6 +322,20 @@
   .chk.readonly{cursor:default;}
   .chk.readonly:hover{border-color:var(--line);}
 
+  .statusSel{
+    font-family:inherit;
+    font-size:12px;
+    padding:4px 6px;
+    border-radius:6px;
+    border:1.5px solid var(--line);
+    background:var(--paper-raised);
+    color:var(--ink);
+    cursor:pointer;
+    min-width:96px;
+  }
+  .statusSel.done{background:var(--pine); border-color:var(--pine); color:#fff;}
+  .statusSel:disabled{cursor:default; opacity:.8;}
+
   td.prog{padding-right:16px;}
   .progcell{display:flex; align-items:center; gap:8px;}
   .bar{flex:1; height:7px; background:var(--line); border-radius:var(--r-pill); overflow:hidden;}
@@ -662,7 +676,15 @@ function render(){
 
     let tds = '<td class="name"><input value="' + escapeAttr(row.name) + '" data-idx="' + idx + '" data-field="name" ' + (locked?'disabled':'') + '></td>';
     COLS.forEach(c => {
-      tds += '<td><span class="chk ' + (row[c.key] ? 'done':'') + ' ' + (locked?'readonly':'') + '" data-idx="' + idx + '" data-field="' + c.key + '">' + (row[c.key] ? '&#10003;':'') + '</span></td>';
+      if(c.key === 'import_' || c.key === 'export'){
+        const noLabel = c.key === 'import_' ? 'No Import' : 'No Export';
+        tds += '<td><select class="statusSel ' + (row[c.key] ? 'done':'') + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked?'disabled':'') + '>'
+             + '<option value="false"' + (!row[c.key] ? ' selected':'') + '>' + noLabel + '</option>'
+             + '<option value="true"' + (row[c.key] ? ' selected':'') + '>Done</option>'
+             + '</select></td>';
+      } else {
+        tds += '<td><span class="chk ' + (row[c.key] ? 'done':'') + ' ' + (locked?'readonly':'') + '" data-idx="' + idx + '" data-field="' + c.key + '">' + (row[c.key] ? '&#10003;':'') + '</span></td>';
+      }
     });
     const pctDisplay = Math.round(prog*100);
     tds += '<td class="prog"><div class="progcell"><div class="bar"><span style="width:' + pctDisplay + '%"></span></div><span class="pct">' + pctDisplay + '%</span></div></td>';
@@ -702,6 +724,14 @@ function attachRowEvents(){
       const idx = +el.dataset.idx;
       const field = el.dataset.field;
       currentRows()[idx][field] = !currentRows()[idx][field];
+      render();
+    });
+  });
+  document.querySelectorAll('.statusSel').forEach(function(el){
+    el.addEventListener('change', function(){
+      const idx = +el.dataset.idx;
+      const field = el.dataset.field;
+      currentRows()[idx][field] = (el.value === 'true');
       render();
     });
   });
