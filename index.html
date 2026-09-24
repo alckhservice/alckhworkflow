@@ -493,6 +493,9 @@
     <div class="stat complete"><div class="n" id="statComplete">0</div><div class="l">FULLY DONE (11/11)</div></div>
     <div class="stat progress"><div class="n" id="statProgress">0</div><div class="l">IN PROGRESS</div></div>
     <div class="stat notstarted"><div class="n" id="statZero">0</div><div class="l">NOT STARTED</div></div>
+    <div class="stat notstarted"><div class="n" id="statZeroPCA">0</div><div class="l">PCA NOT STARTED</div></div>
+    <div class="stat notstarted"><div class="n" id="statZeroBK">0</div><div class="l">BK NOT STARTED</div></div>
+    <div class="stat notstarted"><div class="n" id="statZeroTAX">0</div><div class="l">TAX NOT STARTED</div></div>
   </div>
 
   <div class="toolbar">
@@ -708,6 +711,24 @@ const DROPDOWN_COLS = {
   tax_payment: {no:'Unpaid', yes:'Paid', pending:false}
 };
 
+const GROUPS = {
+  pca: ['import_', 'export'],
+  bk: ['gp1', 'gp2', 'vat0', 'fa', 'sales0cmt', 'invadj', 'salary', 'bankrec'],
+  tax: ['efiling', 'bill_sent', 'tax_payment']
+};
+
+function groupProgress(row, keys){
+  let total = 0, done = 0;
+  keys.forEach(function(key){
+    const v = row[key];
+    if(v === 'na') return; // Pending is excluded, same as the overall progress rule
+    total++;
+    const dd = DROPDOWN_COLS[key];
+    if((dd && dd.pending) || v) done++;
+  });
+  return total > 0 ? (done / total) : 1;
+}
+
 function rowProgress(row){
   let total = 0, done = 0;
   COLS.forEach(function(c){
@@ -753,6 +774,7 @@ function render(){
   tbody.innerHTML = '';
 
   let total=0, complete=0, zero=0, inprog=0, sumProg=0;
+  let zeroPCA=0, zeroBK=0, zeroTAX=0;
 
   rows.forEach((row, idx) => {
     const prog = rowProgress(row);
@@ -760,6 +782,10 @@ function render(){
     if(prog >= 0.999) complete++;
     else if(prog <= 0.001) zero++;
     else inprog++;
+
+    if(groupProgress(row, GROUPS.pca) <= 0.001) zeroPCA++;
+    if(groupProgress(row, GROUPS.bk) <= 0.001) zeroBK++;
+    if(groupProgress(row, GROUPS.tax) <= 0.001) zeroTAX++;
 
     if(search && !row.name.toLowerCase().includes(search)) return;
     if(filter === 'complete' && prog < 0.999) return;
@@ -795,6 +821,9 @@ function render(){
   document.getElementById('statComplete').textContent = complete;
   document.getElementById('statProgress').textContent = inprog;
   document.getElementById('statZero').textContent = zero;
+  document.getElementById('statZeroPCA').textContent = zeroPCA;
+  document.getElementById('statZeroBK').textContent = zeroBK;
+  document.getElementById('statZeroTAX').textContent = zeroTAX;
 
   const overall = total ? Math.round((sumProg/total)*100) : 0;
   document.getElementById('overallPct').textContent = overall + '%';
