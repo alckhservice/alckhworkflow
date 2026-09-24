@@ -286,6 +286,20 @@
     background:var(--paper-raised);
   }
   thead tr.cols th.name-h{text-align:left; padding-left:18px; width:340px;}
+  .sortBtn{
+    display:inline-block;
+    margin-left:6px;
+    padding:1px 4px;
+    font-size:9px;
+    color:var(--ink-soft);
+    border:1px solid var(--line);
+    border-radius:4px;
+    cursor:pointer;
+    background:var(--paper-raised);
+    vertical-align:middle;
+  }
+  .sortBtn:hover{color:var(--ink); border-color:var(--pine);}
+  .sortBtn.disabled{opacity:.35; cursor:default; pointer-events:none;}
   thead tr.cols th.prog-h{width:100px;}
   tbody td{padding:7px 6px; text-align:center; border-bottom:1px solid var(--line); font-size:13px;}
   tbody tr:hover{background:rgba(250,248,242,0.7);}
@@ -470,7 +484,7 @@
           <th></th>
         </tr>
         <tr class="cols">
-          <th class="name-h">Company</th>
+          <th class="name-h">Company <span class="sortBtn" id="sortAsc" title="Sort ascending (1→99)">&#9650;</span><span class="sortBtn" id="sortDesc" title="Sort descending (99→1)">&#9660;</span></th>
           <th>Import</th>
           <th>Export</th>
           <th>G.P<br>(13.14.15)</th>
@@ -746,6 +760,7 @@ function render(){
   document.getElementById('btnAddRow2').style.display = locked ? 'none' : 'inline';
   document.getElementById('btnImport').disabled = locked;
   document.getElementById('btnClearAll').disabled = locked;
+  document.querySelectorAll('.sortBtn').forEach(function(el){ el.classList.toggle('disabled', locked); });
 
   populateMonthSelect();
   attachRowEvents();
@@ -885,6 +900,21 @@ function addRow(){
 }
 document.getElementById('btnAddRow').addEventListener('click', addRow);
 document.getElementById('btnAddRow2').addEventListener('click', addRow);
+
+function nameLeadingNumber(name){
+  const m = String(name || '').match(/^\s*(\d+)/);
+  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+function sortByCompanyNumber(direction){
+  if(isLocked()) return;
+  currentRows().sort(function(a, b){
+    const na = nameLeadingNumber(a.name), nb = nameLeadingNumber(b.name);
+    return direction === 'asc' ? (na - nb) : (nb - na);
+  });
+  render();
+}
+document.getElementById('sortAsc').addEventListener('click', function(){ sortByCompanyNumber('asc'); });
+document.getElementById('sortDesc').addEventListener('click', function(){ sortByCompanyNumber('desc'); });
 
 document.getElementById('btnPrint').addEventListener('click', function(){ window.print(); });
 
