@@ -729,36 +729,25 @@ function groupProgress(row, keys){
   let total = 0, done = 0;
   keys.forEach(function(key){
     const v = row[key];
-    if(v === 'na') return; // Pending is excluded, same as the overall progress rule
     total++;
     const dd = DROPDOWN_COLS[key];
-    if((dd && dd.pending) || v) done++;
+    // Pending (v === 'na') now correctly counts as "not yet done" here — it still
+    // adds to the total, it just doesn't add to done. Done and No Import/No Export
+    // (for the pending-type dropdowns) both count as settled/done.
+    if(v === true) done++;
+    else if(v === false && dd && dd.pending) done++;
   });
   return total > 0 ? (done / total) : 1;
-}
-
-function groupNotStarted(row, keys){
-  // "Not started" means every field in the group is still at its blank/default value —
-  // Pending for the Import/Export-style dropdowns, false for everything else. As soon as
-  // ANY field has an actual answer (Done, No Import, No Export, Sent, Paid, etc.) the
-  // group is no longer "not started", even if the rest is still Pending.
-  return keys.every(function(key){
-    const v = row[key];
-    const dd = DROPDOWN_COLS[key];
-    if(dd && dd.pending) return v === 'na' || v === undefined;
-    return !v;
-  });
 }
 
 function rowProgress(row){
   let total = 0, done = 0;
   COLS.forEach(function(c){
     const v = row[c.key];
-    if(v === 'na') return; // Pending — excluded entirely from completion %
     total++;
     const dd = DROPDOWN_COLS[c.key];
-    const isStatusCol = !!(dd && dd.pending);
-    if(isStatusCol || v) done++; // for Import/Export, both Done and No Import/No Export count as settled
+    if(v === true) done++;
+    else if(v === false && dd && dd.pending) done++;
   });
   return total > 0 ? (done / total) : 1;
 }
@@ -804,9 +793,9 @@ function render(){
     else if(prog <= 0.001) zero++;
     else inprog++;
 
-    if(groupNotStarted(row, GROUPS.pca)) zeroPCA++;
-    if(groupNotStarted(row, GROUPS.bk)) zeroBK++;
-    if(groupNotStarted(row, GROUPS.tax)) zeroTAX++;
+    if(groupProgress(row, GROUPS.pca) <= 0.001) zeroPCA++;
+    if(groupProgress(row, GROUPS.bk) <= 0.001) zeroBK++;
+    if(groupProgress(row, GROUPS.tax) <= 0.001) zeroTAX++;
 
     if(search && !row.name.toLowerCase().includes(search)) return;
     if(filter === 'complete' && prog < 0.999) return;
