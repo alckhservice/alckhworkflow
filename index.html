@@ -631,6 +631,15 @@ function isLocked(){ return !isLatestMonth() && !state.locked[state.current]; }
 const DROPDOWN_COLS = {
   import_: {no:'No Import', yes:'Done', pending:true},
   export: {no:'No Export', yes:'Done', pending:true},
+  gp1: {no:'Pending', yes:'Done', pending:false},
+  gp2: {no:'Pending', yes:'Done', pending:false},
+  vat0: {no:'Pending', yes:'Done', pending:false},
+  fa: {no:'Pending', yes:'Done', pending:false},
+  sales0cmt: {no:'Pending', yes:'Done', pending:false},
+  invadj: {no:'Pending', yes:'Done', pending:false},
+  salary: {no:'Pending', yes:'Done', pending:false},
+  bankrec: {no:'Pending', yes:'Done', pending:false},
+  efiling: {no:'Pending', yes:'Done', pending:false},
   bill_sent: {no:'Not Yet Sent', yes:'Sent', pending:false},
   tax_payment: {no:'Unpaid', yes:'Paid', pending:false}
 };
