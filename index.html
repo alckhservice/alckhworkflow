@@ -501,6 +501,9 @@
     <div class="stat notstarted"><div class="n" id="statZeroPCA">0</div><div class="l">PCA NOT STARTED</div></div>
     <div class="stat notstarted"><div class="n" id="statZeroBK">0</div><div class="l">BK NOT STARTED</div></div>
     <div class="stat notstarted"><div class="n" id="statZeroTAX">0</div><div class="l">TAX NOT STARTED</div></div>
+    <div class="stat progress"><div class="n" id="statPendingPCA">0</div><div class="l">PCA PENDING</div></div>
+    <div class="stat progress"><div class="n" id="statPendingBK">0</div><div class="l">BK PENDING</div></div>
+    <div class="stat progress"><div class="n" id="statPendingTAX">0</div><div class="l">TAX PENDING</div></div>
   </div>
 
   <div class="toolbar">
@@ -784,7 +787,7 @@ function render(){
   tbody.innerHTML = '';
 
   let total=0, complete=0, zero=0, inprog=0, sumProg=0;
-  let zeroPCA=0, zeroBK=0, zeroTAX=0;
+  let zeroPCA=0, zeroBK=0, zeroTAX=0, pendingPCA=0, pendingBK=0, pendingTAX=0;
 
   rows.forEach((row, idx) => {
     const prog = rowProgress(row);
@@ -793,9 +796,16 @@ function render(){
     else if(prog <= 0.001) zero++;
     else inprog++;
 
-    if(groupProgress(row, GROUPS.pca) <= 0.001) zeroPCA++;
-    if(groupProgress(row, GROUPS.bk) <= 0.001) zeroBK++;
-    if(groupProgress(row, GROUPS.tax) <= 0.001) zeroTAX++;
+    const pcaPct = groupProgress(row, GROUPS.pca);
+    const bkPct = groupProgress(row, GROUPS.bk);
+    const taxPct = groupProgress(row, GROUPS.tax);
+    if(pcaPct <= 0.001) zeroPCA++;
+    if(bkPct <= 0.001) zeroBK++;
+    if(taxPct <= 0.001) zeroTAX++;
+
+    if(pcaPct < 0.999) pendingPCA++;
+    if(bkPct < 0.999) pendingBK++;
+    if(taxPct < 0.999) pendingTAX++;
 
     if(search && !row.name.toLowerCase().includes(search)) return;
     if(filter === 'complete' && prog < 0.999) return;
@@ -842,6 +852,9 @@ function render(){
   document.getElementById('statZeroPCA').textContent = zeroPCA;
   document.getElementById('statZeroBK').textContent = zeroBK;
   document.getElementById('statZeroTAX').textContent = zeroTAX;
+  document.getElementById('statPendingPCA').textContent = pendingPCA;
+  document.getElementById('statPendingBK').textContent = pendingBK;
+  document.getElementById('statPendingTAX').textContent = pendingTAX;
 
   const overall = total ? Math.round((sumProg/total)*100) : 0;
   document.getElementById('overallPct').textContent = overall + '%';
