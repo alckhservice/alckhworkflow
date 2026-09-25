@@ -456,6 +456,37 @@
     thead{position:static;}
   }
   @media (max-width:900px){ .stats{grid-template-columns:repeat(2,1fr);} }
+
+  /* ---- Pending drill-down popup ---- */
+  .stat[data-pending]{cursor:pointer; user-select:none; transition:transform .12s, box-shadow .12s;}
+  .stat[data-pending]:hover{transform:translateY(-2px); box-shadow:0 8px 22px rgba(40,50,48,0.12);}
+  .pmodal-back{position:fixed; inset:0; background:rgba(28,36,34,0.45); display:none; align-items:center; justify-content:center; z-index:9999; padding:20px;}
+  .pmodal-back.show{display:flex;}
+  .pmodal{background:var(--paper-raised); border-radius:var(--r-lg); width:min(1200px,96vw); max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.25); overflow:hidden;}
+  .pmodal-head{display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--line);}
+  .pmodal-head h3{margin:0; font-family:var(--serif); font-size:22px; flex:1;}
+  .pmodal-export{border:1px solid var(--pine); background:var(--pine); color:#fff; border-radius:var(--r-pill); padding:7px 16px; font-size:13px; font-weight:600; cursor:pointer;}
+  .pmodal-export:hover{background:#244a3f;}
+  .pmodal-export:disabled{opacity:.4; cursor:default;}
+  .pmodal-head .cnt{font-family:var(--mono); font-size:12px; background:var(--amber-soft); color:var(--brass-deep); padding:3px 10px; border-radius:var(--r-pill);}
+  .pmodal-close{border:none; background:none; font-size:22px; cursor:pointer; color:var(--ink-soft); line-height:1;}
+  .pmodal-search{margin:12px 20px 0; padding:9px 14px; font-size:14px; border:1px solid var(--line); border-radius:var(--r-pill);}
+  .pmodal-body{overflow:auto; padding:8px 20px 18px;}
+  .pmodal table{width:100%; min-width:0; border-collapse:collapse; font-size:13px; table-layout:auto;}
+  .pmodal thead{box-shadow:none;}
+  .pmodal th{position:sticky; top:0; background:var(--paper); text-align:left; font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); padding:10px 12px; border-bottom:1px solid var(--line); white-space:nowrap;}
+  .pmodal td{padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:middle; text-align:left; font-size:14px;}
+  .pmodal td.pm-name{font-weight:500; min-width:320px;}
+  .pmodal tr.pm-row{cursor:pointer;}
+  .pmodal tr.pm-row:hover td{background:var(--amber-soft);}
+  .pmodal .pm-pct{font-family:var(--mono); font-weight:600; color:var(--amber); white-space:nowrap;}
+  .pmodal .pm-pct.zero{color:var(--rust);}
+  .pmodal .pm-tag{display:inline-block; margin:2px 4px 2px 0; padding:2px 8px; border-radius:var(--r-pill); background:var(--rust-soft); color:var(--rust); font-size:12.5px; white-space:nowrap;}
+  .pmodal .pm-empty{padding:30px; text-align:center; color:var(--ink-soft);}
+  .pmodal-foot{padding:10px 20px; border-top:1px solid var(--line); font-size:11px; color:var(--ink-soft); font-family:var(--mono);}
+  tr.pm-flash td{animation:pmflash 2s ease;}
+  @keyframes pmflash{0%,40%{background:var(--amber-soft);}100%{background:transparent;}}
+  @media print{ .pmodal-back{display:none !important;} }
 </style>
 </head>
 <body>
@@ -501,9 +532,19 @@
     <div class="stat complete"><div class="n" id="statComplete">0</div><div class="l">FULLY DONE (11/11)</div></div>
     <div class="stat progress"><div class="n" id="statProgress">0</div><div class="l">IN PROGRESS</div></div>
     <div class="stat notstarted"><div class="n" id="statZero">0</div><div class="l">NOT STARTED</div></div>
-    <div class="stat progress"><div class="n" id="statPendingPCA">0</div><div class="l">PCA PENDING</div></div>
-    <div class="stat progress"><div class="n" id="statPendingBK">0</div><div class="l">BK PENDING</div></div>
-    <div class="stat progress"><div class="n" id="statPendingTAX">0</div><div class="l">TAX PENDING</div></div>
+    <div class="stat progress" data-pending="pca" title="Double-click to see pending clients"><div class="n" id="statPendingPCA">0</div><div class="l">PCA PENDING</div></div>
+    <div class="stat progress" data-pending="bk" title="Double-click to see pending clients"><div class="n" id="statPendingBK">0</div><div class="l">BK PENDING</div></div>
+    <div class="stat progress" data-pending="tax" title="Double-click to see pending clients"><div class="n" id="statPendingTAX">0</div><div class="l">TAX PENDING</div></div>
+  </div>
+
+
+  <div class="pmodal-back" id="pmBack">
+    <div class="pmodal" role="dialog" aria-modal="true">
+      <div class="pmodal-head"><h3 id="pmTitle">Pending</h3><span class="cnt" id="pmCount">0</span><button class="pmodal-export" id="pmExport" title="Export this list to Excel"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>Export Excel</button><button class="pmodal-close" id="pmClose" title="Close">&times;</button></div>
+      <input type="search" class="pmodal-search" id="pmSearch" placeholder="Filter clients…">
+      <div class="pmodal-body" id="pmBody"></div>
+      <div class="pmodal-foot">Click a client to jump to its row · Export saves the list shown (respects the filter) · Esc to close</div>
+    </div>
   </div>
 
   <div class="toolbar">
@@ -1139,6 +1180,113 @@ document.getElementById('fileInput').addEventListener('change', function(e){
   reader.readAsArrayBuffer(file);
   e.target.value = '';
 });
+
+
+// ---- Pending drill-down popup (double-click PCA / BK / TAX Pending cards) ----
+const PM_GROUP_NAMES = {pca:'PCA', bk:'BK', tax:'TAX'};
+let pmCurrentGroup = null;
+let pmLastShown = [];
+function pmEsc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function pmLabel(key){ const c = COLS.find(function(x){ return x.key === key; }); return c ? c.label : key; }
+function pmItemDone(row, key){
+  const v = row[key], dd = DROPDOWN_COLS[key];
+  return v === true || (v === false && dd && dd.pending);
+}
+function pmRender(){
+  const g = pmCurrentGroup; if(!g) return;
+  const keys = GROUPS[g];
+  const q = document.getElementById('pmSearch').value.trim().toLowerCase();
+  const list = [];
+  currentRows().forEach(function(row, idx){
+    const pct = groupProgress(row, keys);
+    if(pct >= 0.999) return;
+    const items = keys.filter(function(k){ return !pmItemDone(row, k); }).map(function(k){
+      const dd = DROPDOWN_COLS[k];
+      const status = row[k] === 'na' ? 'Pending' : (dd ? dd.no : 'Not done');
+      return pmLabel(k) + (status === 'Pending' ? '' : ': ' + status);
+    });
+    list.push({idx:idx, no:idx+1, name:row.name || '(no name)', pct:Math.round(pct*100), items:items});
+  });
+  document.getElementById('pmTitle').textContent = PM_GROUP_NAMES[g] + ' Pending — ' + (state.current || '');
+  document.getElementById('pmCount').textContent = list.length + ' client' + (list.length === 1 ? '' : 's');
+  const shown = q ? list.filter(function(r){ return r.name.toLowerCase().includes(q); }) : list;
+  pmLastShown = shown;
+  document.getElementById('pmExport').disabled = !shown.length;
+  const body = document.getElementById('pmBody');
+  if(!shown.length){
+    body.innerHTML = '<div class="pm-empty">' + (list.length ? 'No client matches that filter.' : 'Nothing pending here 🎉') + '</div>';
+    return;
+  }
+  let h = '<table><thead><tr><th>Company</th><th>' + PM_GROUP_NAMES[g] + ' %</th><th>Pending items</th></tr></thead><tbody>';
+  shown.forEach(function(r){
+    h += '<tr class="pm-row" data-idx="' + r.idx + '"><td class="pm-name">' + pmEsc(r.name) + '</td>'
+       + '<td class="pm-pct' + (r.pct <= 0 ? ' zero' : '') + '">' + r.pct + '%</td><td>'
+       + r.items.map(function(t){ return '<span class="pm-tag">' + pmEsc(t) + '</span>'; }).join('') + '</td></tr>';
+  });
+  body.innerHTML = h + '</tbody></table>';
+}
+function pmOpen(group){
+  pmCurrentGroup = group;
+  document.getElementById('pmSearch').value = '';
+  pmRender();
+  document.getElementById('pmBack').classList.add('show');
+}
+function pmClose(){ document.getElementById('pmBack').classList.remove('show'); pmCurrentGroup = null; }
+document.querySelectorAll('.stat[data-pending]').forEach(function(card){
+  card.addEventListener('dblclick', function(e){ e.preventDefault(); pmOpen(card.dataset.pending); });
+});
+document.getElementById('pmClose').addEventListener('click', pmClose);
+document.getElementById('pmBack').addEventListener('click', function(e){ if(e.target.id === 'pmBack') pmClose(); });
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && pmCurrentGroup) pmClose(); });
+document.getElementById('pmSearch').addEventListener('input', pmRender);
+function pmExportExcel(){
+  const g = pmCurrentGroup; if(!g || !pmLastShown.length) return;
+  if(typeof XLSX === 'undefined'){ alert('Excel library not loaded yet — please try again in a moment.'); return; }
+  const keys = GROUPS[g];
+  const header = ['Company', PM_GROUP_NAMES[g] + ' %'].concat(keys.map(pmLabel)).concat(['Pending items']);
+  const rows = currentRows();
+  const aoa = [header];
+  pmLastShown.forEach(function(r){
+    const row = rows[r.idx];
+    const line = [r.name, r.pct / 100];
+    keys.forEach(function(k){
+      const v = row[k], dd = DROPDOWN_COLS[k];
+      line.push(v === 'na' ? 'Pending' : (v === true ? (dd ? dd.yes : 'Done') : (dd ? dd.no : 'Not done')));
+    });
+    line.push(r.items.join(', '));
+    aoa.push(line);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  for(let i = 1; i < aoa.length; i++){ const c = ws[XLSX.utils.encode_cell({r:i, c:1})]; if(c) c.z = '0%'; }
+  ws['!cols'] = [{wch:48}, {wch:8}].concat(keys.map(function(k){ return {wch:Math.max(12, pmLabel(k).length + 2)}; })).concat([{wch:50}]);
+  ws['!autofilter'] = {ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:aoa.length-1, c:header.length-1}})};
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, PM_GROUP_NAMES[g] + ' Pending');
+  const month = String(state.current || '').replace(/[^\w]+/g, '_');
+  XLSX.writeFile(wb, PM_GROUP_NAMES[g] + '_Pending_' + month + '.xlsx');
+}
+document.getElementById('pmExport').addEventListener('click', pmExportExcel);
+
+document.getElementById('pmBody').addEventListener('click', function(e){
+  const tr = e.target.closest('tr.pm-row'); if(!tr) return;
+  const idx = tr.dataset.idx;
+  pmClose();
+  let input = document.querySelector('#tbody input[data-idx="' + idx + '"]');
+  if(!input){ // row hidden by the search / status filter — clear them and re-render
+    document.getElementById('search').value = '';
+    document.getElementById('statusFilter').value = 'all';
+    render();
+    input = document.querySelector('#tbody input[data-idx="' + idx + '"]');
+  }
+  if(input){
+    const row = input.closest('tr');
+    row.scrollIntoView({behavior:'smooth', block:'center'});
+    row.classList.remove('pm-flash'); void row.offsetWidth; row.classList.add('pm-flash');
+  }
+});
+// keep an open popup live when data changes (edits or cloud sync)
+const _pmOrigRender = render;
+render = function(){ _pmOrigRender.apply(this, arguments); if(pmCurrentGroup) pmRender(); };
 
 render();
 startCloudSync();
