@@ -487,9 +487,40 @@
   tr.pm-flash td{animation:pmflash 2s ease;}
   @keyframes pmflash{0%,40%{background:var(--amber-soft);}100%{background:transparent;}}
   @media print{ .pmodal-back{display:none !important;} }
+
+  /* ---- Team login gate ---- */
+  body.locked .wrap{display:none;}
+  #loginGate{display:none;position:fixed;inset:0;z-index:9999;background:var(--paper);
+    align-items:center;justify-content:center;padding:20px;}
+  body.locked #loginGate{display:flex;}
+  .lg-card{background:var(--paper-raised);border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:34px 32px 28px;width:100%;max-width:360px;box-shadow:0 10px 30px rgba(28,36,34,.08);text-align:center;}
+  .lg-card .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--brass);}
+  .lg-card h2{font-family:var(--serif);font-size:26px;margin:6px 0 4px;color:var(--ink);}
+  .lg-card p{font-family:var(--sans);font-size:13px;color:var(--ink-soft);margin:0 0 20px;}
+  .lg-card input{width:100%;padding:12px 14px;font-size:15px;border:1px solid var(--line);
+    border-radius:var(--r-sm);font-family:var(--sans);background:var(--paper);color:var(--ink);}
+  .lg-card input:focus{outline:2px solid var(--pine);outline-offset:1px;background:#fff;}
+  .lg-card button{margin-top:12px;width:100%;padding:12px;font-size:15px;font-weight:600;border:0;
+    border-radius:var(--r-pill);background:var(--ink);color:#fff;cursor:pointer;font-family:var(--sans);}
+  .lg-card button:disabled{opacity:.6;cursor:wait;}
+  .lg-err{min-height:18px;margin-top:10px;font-size:13px;color:var(--rust);font-family:var(--sans);}
+  #logoutBtn{margin-left:10px;background:none;border:1px solid var(--line);border-radius:var(--r-pill);
+    padding:2px 10px;font:inherit;cursor:pointer;color:var(--ink-soft);}
 </style>
 </head>
-<body>
+<body class="locked">
+<div id="loginGate">
+  <form class="lg-card" id="loginForm" autocomplete="on">
+    <div class="kicker">ALCKH SERVICES SOLUTION</div>
+    <h2>Team Login</h2>
+    <p>Enter the team password to open the report.</p>
+    <input type="text" name="username" value="ALCKH team" autocomplete="username" hidden>
+    <input type="password" id="loginPw" placeholder="Team password" autocomplete="current-password" required>
+    <button type="submit" id="loginBtn">Sign in</button>
+    <div class="lg-err" id="loginErr"></div>
+  </form>
+</div>
 <div class="wrap">
 
   <header class="top">
@@ -630,6 +661,7 @@
   <footer class="note">
     <span id="lastSaved">Not yet saved</span>
     <span id="syncStatus" style="margin-left:10px;">Connecting…</span>
+    <button id="logoutBtn" type="button" title="Sign out on this device">Sign out</button>
     <span>Synced live across the team · Export Excel to back up or share a month</span>
   </footer>
 </div>
@@ -1288,8 +1320,39 @@ document.getElementById('pmBody').addEventListener('click', function(e){
 const _pmOrigRender = render;
 render = function(){ _pmOrigRender.apply(this, arguments); if(pmCurrentGroup) pmRender(); };
 
-render();
-startCloudSync();
+// ---- Team login gate (shared team password via Firebase Auth) ----
+const TEAM_EMAIL = 'team@alckh-control-a868c.firebaseapp.com';
+let cloudStarted = false;
+firebase.auth().onAuthStateChanged((user)=>{
+  if(user){
+    document.body.classList.remove('locked');
+    render();
+    if(!cloudStarted){ cloudStarted = true; startCloudSync(); }
+  }else{
+    document.body.classList.add('locked');
+    setTimeout(()=>{ const pw=document.getElementById('loginPw'); if(pw) pw.focus(); }, 50);
+    if(cloudStarted){ location.reload(); }
+  }
+});
+document.getElementById('loginForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const pw = document.getElementById('loginPw');
+  const btn = document.getElementById('loginBtn');
+  const err = document.getElementById('loginErr');
+  err.textContent = ''; btn.disabled = true; btn.textContent = 'Signing in…';
+  firebase.auth().signInWithEmailAndPassword(TEAM_EMAIL, pw.value)
+    .catch((ex)=>{
+      const c = ex && ex.code || '';
+      err.textContent = (c.includes('network')) ? 'No internet connection — please try again.'
+        : (c.includes('too-many-requests')) ? 'Too many attempts. Wait a few minutes and try again.'
+        : 'Wrong password.';
+      pw.select();
+    })
+    .finally(()=>{ btn.disabled = false; btn.textContent = 'Sign in'; });
+});
+document.getElementById('logoutBtn').addEventListener('click', ()=>{
+  if(confirm('Sign out on this device?')) firebase.auth().signOut();
+});
 </script>
 </body>
 </html>
