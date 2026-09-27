@@ -1,0 +1,24 @@
+rules_version = '2';
+
+// ALCKH Working Flow Report — only the shared team account can read or write.
+// Deploy:  firebase deploy --only firestore:rules
+// (or paste into Firebase Console → Firestore Database → Rules → Publish)
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isTeam() {
+      return request.auth != null
+        && request.auth.token.email == 'team@alckh-control-a868c.firebaseapp.com';
+    }
+
+    // All team progress data lives in this one document.
+    match /alckh_working_flow_report/{docId} {
+      allow read, write: if isTeam();
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
