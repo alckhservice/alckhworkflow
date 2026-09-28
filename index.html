@@ -689,6 +689,21 @@ const DEFAULT_DATA = [{"name": "1 - KONDA FURNITURE CO., LTD.", "import_": true,
 const STORAGE_KEY = 'alckh_working_report_v2';
 const FIRST_MONTH = 'August 2026';
 
+// Sort months chronologically (by month and year)
+function sortMonthsChronologically(monthOrder){
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  return monthOrder.slice().sort((a, b) => {
+    const aParts = a.split(' ');
+    const bParts = b.split(' ');
+    const aMonth = monthNames.indexOf(aParts[0]);
+    const bMonth = monthNames.indexOf(bParts[0]);
+    const aYear = parseInt(aParts[1]);
+    const bYear = parseInt(bParts[1]);
+    if(aYear !== bYear) return aYear - bYear;
+    return aMonth - bMonth;
+  });
+}
+
 // ---- Firebase / Firestore sync ----
 const firebaseConfig = {
   apiKey: "AIzaSyCAC_hWVU26xPgz2OC_cstob6ychj5nds0",
@@ -742,6 +757,7 @@ function startCloudSync(){
       applyingRemote = true;
       state = remote;
       if(!state.locked) state.locked = {};
+      state.order = sortMonthsChronologically(state.order);
       render();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       applyingRemote = false;
@@ -778,12 +794,13 @@ function loadState(){
       const parsed = JSON.parse(raw);
       if(parsed && parsed.months && parsed.order && parsed.order.length){
         if(!parsed.locked) parsed.locked = {};
+        parsed.order = sortMonthsChronologically(parsed.order);
         return parsed;
       }
     }
   }catch(e){}
   const migrated = migrateOld();
-  if(migrated){ migrated.locked = {}; return migrated; }
+  if(migrated){ migrated.locked = {}; migrated.order = sortMonthsChronologically(migrated.order); return migrated; }
   return {months:{[FIRST_MONTH]: {rows: freshRows()}}, order:[FIRST_MONTH], current: FIRST_MONTH, locked:{}};
 }
 
@@ -1055,6 +1072,7 @@ document.getElementById('btnNewMonth').addEventListener('click', function(){
   });
   state.months[clean] = {rows: rows};
   state.order.push(clean);
+  state.order = sortMonthsChronologically(state.order);
   state.current = clean;
   render();
 });
