@@ -855,6 +855,10 @@ const DROPDOWN_COLS = {
   tax_payment: {no:'Unpaid', yes:'Paid', pending:false}
 };
 
+// The 13 checklist items. Plan Finish / Actual Finish are dates, not tasks, so they are
+// kept out of progress % and out of the status columns of the Excel export/import.
+const TASK_COLS = COLS.filter(function(c){ return !!DROPDOWN_COLS[c.key]; });
+
 const GROUPS = {
   pca: ['import_', 'export'],
   bk: ['gp1', 'gp2', 'vat0', 'fa', 'sales0cmt', 'invadj', 'salary', 'bankrec'],
@@ -878,7 +882,7 @@ function groupProgress(row, keys){
 
 function rowProgress(row){
   let total = 0, done = 0;
-  COLS.forEach(function(c){
+  TASK_COLS.forEach(function(c){
     const v = row[c.key];
     total++;
     const dd = DROPDOWN_COLS[c.key];
@@ -1225,10 +1229,10 @@ document.getElementById('btnExport').addEventListener('click', function(){
     Math.round((rows.reduce(function(s,r){return s+rowProgress(r);},0)/(rows.length||1))*10000)/10000]);
   aoa.push([]);
   aoa.push(['Company','PCA',null,null,'BK',null,null,null,null,null,null,null,null,'TAX',null,null,null,'Progess']);
-  aoa.push([null,'Import','Export','PCA %','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','BK %','E-filling','Separate Bill','Tax Payment','TAX %',null]);
+  aoa.push([null,'Import','Export','PCA %','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','BK %','E-filling','Separate Bill','Tax Payment','TAX %',null,'Plan Finish','Actual Finish Date']);
   rows.forEach(function(row){
     const line = [row.name];
-    COLS.forEach(function(c){
+    TASK_COLS.forEach(function(c){
       const v = row[c.key];
       const dd = DROPDOWN_COLS[c.key];
       if(v === 'na'){ line.push('Pending'); }
@@ -1239,6 +1243,7 @@ document.getElementById('btnExport').addEventListener('click', function(){
       else if(c.key === 'tax_payment') line.push(Math.round(groupProgress(row, GROUPS.tax)*10000)/10000);
     });
     line.push(Math.round(rowProgress(row)*10000)/10000);
+    line.push(row.plan_finish || '', row.actual_finish || '');
     aoa.push(line);
   });
   const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -1247,7 +1252,7 @@ document.getElementById('btnExport').addEventListener('click', function(){
     {s:{r:2,c:4},e:{r:2,c:12}},
     {s:{r:2,c:13},e:{r:2,c:16}}
   ];
-  ws['!cols'] = [{wch:52}].concat(new Array(16).fill({wch:11})).concat([{wch:10}]);
+  ws['!cols'] = [{wch:52}].concat(new Array(16).fill({wch:11})).concat([{wch:10},{wch:13},{wch:16}]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, state.current.slice(0,31) || 'Schedule');
   const fname = ('ALCKH_' + state.current).replace(/[^a-z0-9 _-]/gi,'') + '.xlsx';
@@ -1285,7 +1290,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
         if(!line || !line[0]) continue;
         const row = {name: String(line[0]).trim()};
         let col = 1;
-        COLS.forEach(function(c){
+        TASK_COLS.forEach(function(c){
           const v = line[col];
           col++;
           const s = v ? String(v).trim().toLowerCase() : '';
@@ -1299,6 +1304,9 @@ document.getElementById('fileInput').addEventListener('change', function(e){
           }
           if(c.key === 'export' || c.key === 'bankrec' || c.key === 'tax_payment') col++; // skip the computed % column
         });
+        // col is now the Progress column; the two date columns follow it
+        row.plan_finish = line[col+1] ? String(line[col+1]).trim() : '';
+        row.actual_finish = line[col+2] ? String(line[col+2]).trim() : '';
         newRows.push(row);
       }
       if(newRows.length === 0){
