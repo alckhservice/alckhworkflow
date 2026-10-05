@@ -749,18 +749,24 @@ function setSyncStatus(text){
   if(el) el.textContent = text;
 }
 
+let fullSavesPending = 0; // whole-state saves scheduled or not yet confirmed by the cloud
+let fullSaveScheduled = false;
 function pushToCloud(){
   if(applyingRemote) return;
   if(!initialSyncDone) return; // never push this device's local/starting copy until it has been reconciled with the cloud at least once
   clearTimeout(saveTimer);
+  if(!fullSaveScheduled){ fullSaveScheduled = true; fullSavesPending++; }
   setSyncStatus('Syncing…');
   saveTimer = setTimeout(()=>{
-    docRef.set(state).then(()=>{
+    fullSaveScheduled = false;
+    let p;
+    try{ p = docRef.set(state); }catch(e){ p = Promise.reject(e); }
+    p.then(()=>{
       setSyncStatus('Synced ✓');
     }).catch((e)=>{
       setSyncStatus('Offline — saved on this device only');
       console.error('Firestore save failed', e);
-    });
+    }).then(()=>{ fullSavesPending = Math.max(0, fullSavesPending - 1); });
   }, 600);
 }
 
@@ -776,14 +782,10 @@ function startCloudSync(){
     if(snap.metadata.hasPendingWrites){ initialSyncDone = true; return; } // this is our own just-sent write, ignore
     const remote = snap.data();
     if(remote && remote.months && remote.order && remote.order.length){
-      applyingRemote = true;
-      state = remote;
-      if(!state.locked) state.locked = {};
-      state.order = sortMonthsChronologically(state.order);
-      renderView();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      applyingRemote = false;
-      setSyncStatus('Synced ✓');
+      // This copy may not include our own edits that are still on their way to the cloud;
+      // lay them back on top so they neither vanish from the screen nor get lost later.
+      overlayPendingCells(remote);
+      applyRemote(remote);
     }
     initialSyncDone = true;
   }, (err)=>{
@@ -791,6 +793,173 @@ function startCloudSync(){
     initialSyncDone = true; // give up waiting for the cloud so this device can at least keep working (and saving) locally
     setSyncStatus('Offline — using last saved copy on this device');
   });
+}
+
+// ---- Per-change cloud saves ----
+// A status or date edit no longer uploads the whole database. saveCell() runs a Firestore
+// transaction that reads the latest cloud copy, changes only that one cell in it, and writes
+// back only the current month's rows. If a teammate saved at the same moment, Firestore
+// re-runs the transaction on top of their change, so neither edit is lost.
+// Structural changes (add/remove rows, months, import, clear, sort, rename) still use the
+// full-state pushToCloud() exactly as before.
+let cellQueue = [];          // edits waiting for the next transaction
+let cellInFlight = [];       // edits in the transaction currently running
+let cellFlushing = false;
+let cellRetryTimer = null;
+let cellRetryDelay = 5000;
+
+function saveLocal(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const now = new Date();
+  document.getElementById('lastSaved').textContent = 'Saved ' + now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+
+// Find a company's row in a rows array: same position and name, otherwise a UNIQUE name
+// match (so duplicate names such as "New Company" can never receive someone else's edit).
+function findRowIndex(rows, idx, name){
+  if(rows[idx] && rows[idx].name === name) return idx;
+  const hits = []; rows.forEach(function(r, k){ if(r && r.name === name) hits.push(k); });
+  return hits.length === 1 ? hits[0] : -1;
+}
+
+// Missing, null and '' all mean "not set" (older rows may lack a field entirely).
+function sameCell(a, b){
+  const n = function(v){ return (v === undefined || v === null || v === '' || v === false) ? false : v; };
+  return n(a) === n(b);
+}
+
+// Lay our not-yet-confirmed edits on top of an incoming copy — but only where that cell still
+// holds the value it had before our edit. If a teammate already changed the same cell, theirs wins.
+function overlayPendingCells(remote){
+  cellInFlight.concat(cellQueue).forEach(function(c){
+    const m = remote.months && remote.months[c.month];
+    if(!m || !Array.isArray(m.rows)) return;
+    const i = findRowIndex(m.rows, c.idx, c.name);
+    if(i >= 0 && sameCell(m.rows[i][c.field], c.prev)) m.rows[i][c.field] = c.value;
+  });
+}
+
+function saveCell(idx, field, prev){
+  saveLocal();
+  if(applyingRemote) return;
+  if(!initialSyncDone) return; // same guard as pushToCloud: never write before the first cloud copy has arrived
+  const row = currentRows()[idx];
+  if(!row) return;
+  cellQueue.push({month: state.current, idx: idx, name: row.name, field: field, value: row[field], prev: prev});
+  setSyncStatus('Syncing…');
+  flushCells();
+}
+
+// Sends every queued edit in ONE transaction; edits made while it runs go in the next one.
+// On failure (offline, timeout) the edits go back to the front of the queue and are retried —
+// this never falls back to uploading the whole database.
+function flushCells(){
+  if(cellFlushing || !cellQueue.length) return;
+  clearTimeout(cellRetryTimer); cellRetryTimer = null;
+  cellFlushing = true;
+  const batch = cellQueue; cellQueue = [];
+  cellInFlight = batch;
+  let abandoned = false;
+  let skippedNames = [];
+  const txDone = Promise.resolve().then(function(){ return db.runTransaction(function(tx){
+    // Firestore may re-run this function; a batch we gave up on must never write late.
+    if(abandoned) throw new Error('abandoned');
+    return tx.get(docRef).then(function(snap){
+      if(abandoned) throw new Error('abandoned');
+      skippedNames = [];
+      const data = snap.exists ? snap.data() : null;
+      const touched = {};
+      batch.forEach(function(c){
+        const m = data && data.months && data.months[c.month];
+        if(!m || !Array.isArray(m.rows)){ skippedNames.push(c.name); return; }
+        const i = findRowIndex(m.rows, c.idx, c.name);
+        if(i < 0){ skippedNames.push(c.name); return; } // renamed/removed by a teammate meanwhile: don't overwrite
+        const now = m.rows[i][c.field];
+        if(!sameCell(now, c.prev) && !sameCell(now, c.value)){ skippedNames.push(c.name); return; } // a teammate changed this same cell first: keep theirs
+        const updated = Object.assign({}, m.rows[i]); updated[c.field] = c.value;
+        m.rows[i] = updated;
+        touched[c.month] = m.rows;
+      });
+      Object.keys(touched).forEach(function(month){
+        tx.update(docRef, new firebase.firestore.FieldPath('months', month, 'rows'), touched[month]);
+      });
+    });
+  }); });
+  const timeout = new Promise(function(_, reject){ setTimeout(function(){ reject(new Error('timeout')); }, 20000); });
+  Promise.race([txDone, timeout]).then(function(){
+    cellInFlight = [];
+    cellRetryDelay = 5000;
+    // An edit on a company added on this device moments ago reaches the cloud with that
+    // add's own full save, so only warn about companies that no longer exist here either.
+    const lost = skippedNames.filter(function(n){
+      return !(fullSavesPending && currentRows().some(function(r){ return r.name === n; }));
+    });
+    if(lost.length) setSyncStatus('Not saved — a teammate changed that company at the same time, please check it and redo');
+    else if(!cellQueue.length && !fullSavesPending) setSyncStatus('Synced ✓');
+  }, function(err){
+    abandoned = true;
+    cellInFlight = [];
+    const code = err && err.code, msg = err && err.message;
+    const retryable = msg === 'timeout' || code === 'unavailable' || code === 'deadline-exceeded' || code === 'aborted' || code === 'resource-exhausted';
+    if(retryable){
+      cellQueue = batch.concat(cellQueue); // keep the order: older edits first
+      setSyncStatus('Offline — your changes will be sent when the connection is back');
+      console.warn('Cell save failed, will retry', err);
+      clearTimeout(cellRetryTimer);
+      cellRetryTimer = setTimeout(function(){ cellRetryTimer = null; flushCells(); }, cellRetryDelay);
+      cellRetryDelay = Math.min(cellRetryDelay * 2, 60000);
+    } else {
+      // Permanent problem (e.g. permission): don't loop; tell the user. The next cloud update restores the screen.
+      setSyncStatus('Not saved — could not save that change (' + (code || 'error') + '), please try again');
+      console.error('Cell save failed', err);
+    }
+  }).then(function(){
+    cellFlushing = false;
+    if(cellQueue.length && !cellRetryTimer) flushCells();
+  });
+}
+window.addEventListener('online', function(){ if(cellQueue.length){ clearTimeout(cellRetryTimer); cellRetryTimer = null; flushCells(); } });
+
+// Apply a copy of the data that arrived from the cloud. When only cells of the month on
+// screen changed, update just those cells instead of redrawing the whole table.
+function applyRemote(remote){
+  applyingRemote = true;
+  try{
+    if(!remote.locked) remote.locked = {};
+    remote.order = sortMonthsChronologically(remote.order);
+    if(!patchRemote(remote)){
+      state = remote;
+      renderView();
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } finally {
+    applyingRemote = false;
+  }
+  setSyncStatus('Synced ✓');
+}
+
+function patchRemote(remote){
+  const J = JSON.stringify;
+  if(J(remote) === J(state)){ state = remote; return true; } // nothing changed (e.g. our own save coming back)
+  const keys = Object.keys(remote).sort(), lkeys = Object.keys(state).sort();
+  if(J(keys) !== J(lkeys)) return false;
+  for(const k of keys){ if(k !== 'months' && J(remote[k]) !== J(state[k])) return false; }
+  const cur = state.current;
+  if(J(Object.keys(remote.months).sort()) !== J(Object.keys(state.months).sort())) return false;
+  for(const m in remote.months){ if(m !== cur && J(remote.months[m]) !== J(state.months[m])) return false; }
+  const a = state.months[cur] && state.months[cur].rows, b = remote.months[cur] && remote.months[cur].rows;
+  if(!a || !b || a.length !== b.length) return false;
+  for(let i = 0; i < a.length; i++){ if(!a[i] || !b[i] || a[i].name !== b[i].name) return false; }
+  if(document.getElementById('statusFilter').value !== 'all') return false; // rows may need to appear/disappear
+  state = remote;
+  for(let i = 0; i < b.length; i++){
+    if(J(a[i]) === J(b[i])) continue;
+    const tr = paintRowCells(i, b[i]);
+    if(tr) paintRowProgress(tr, b[i]);
+  }
+  updateStats();
+  if(pmCurrentGroup) pmRender();
+  return true;
 }
 
 function freshRows(){ return JSON.parse(JSON.stringify(DEFAULT_DATA)); }
@@ -1077,22 +1246,46 @@ function updateStats(){
 // After one status dropdown changes: restyle that dropdown, update its row's progress bar
 // and the totals, then save. Falls back to a full redraw when a status filter is on,
 // because the row may need to appear or disappear.
-function refreshRow(el, idx){
-  if(document.getElementById('statusFilter').value !== 'all'){ render(); return; }
-  const row = currentRows()[idx];
-  const field = el.dataset.field, v = row[field], dd = DROPDOWN_COLS[field];
+function paintSelect(el, v, dd){
   el.classList.remove('done','na');
   const cls = v === 'na' ? 'na' : (v === true ? 'done' : (dd && dd.pending ? 'done' : ''));
   if(cls) el.classList.add(cls);
+}
+function paintRowProgress(tr, row){
   const prog = rowProgress(row), pct = Math.round(prog*100);
-  const tr = el.closest('tr');
   tr.classList.remove('complete','zero');
   if(prog >= 0.999) tr.classList.add('complete'); else if(prog <= 0.001) tr.classList.add('zero');
   const bar = tr.querySelector('td.prog .bar span'); if(bar) bar.style.width = pct + '%';
   const pctEl = tr.querySelector('td.prog .pct'); if(pctEl) pctEl.textContent = pct + '%';
+}
+// Write one row's values into its on-screen controls (row may be hidden by search: returns null).
+function paintRowCells(idx, row){
+  let tr = null;
+  document.querySelectorAll('#tbody [data-idx="' + idx + '"]').forEach(function(el){
+    tr = tr || el.closest('tr');
+    const f = el.dataset.field, v = row[f];
+    if(el.classList.contains('statusSel')){
+      const want = v === 'na' ? 'na' : (v === true ? 'true' : 'false');
+      if(el.value !== want) el.value = want;
+      paintSelect(el, v, DROPDOWN_COLS[f]);
+    } else if(el.classList.contains('dateSelect')){
+      if(el.value !== (v || '')) el.value = v || '';
+    } else if(f === 'name' && document.activeElement !== el){
+      el.value = v;
+    }
+  });
+  return tr;
+}
+
+function refreshRow(el, idx, prev){
+  const field = el.dataset.field;
+  if(document.getElementById('statusFilter').value !== 'all'){ renderView(); saveCell(idx, field, prev); return; }
+  const row = currentRows()[idx];
+  paintSelect(el, row[field], DROPDOWN_COLS[field]);
+  paintRowProgress(el.closest('tr'), row);
   updateStats();
   if(pmCurrentGroup) pmRender();
-  saveState();
+  saveCell(idx, field, prev);
 }
 
 function escapeAttr(s){
@@ -1105,8 +1298,9 @@ function attachRowEvents(){
     el.addEventListener('change', function(){
       const idx = +el.dataset.idx;
       const field = el.dataset.field;
+      const prev = currentRows()[idx][field];
       currentRows()[idx][field] = el.value;
-      saveState();
+      saveCell(idx, field, prev);
     });
   });
   document.querySelectorAll('.chk').forEach(function(el){
@@ -1121,8 +1315,9 @@ function attachRowEvents(){
     el.addEventListener('change', function(){
       const idx = +el.dataset.idx;
       const field = el.dataset.field;
+      const prev = currentRows()[idx][field];
       currentRows()[idx][field] = (el.value === 'na') ? 'na' : (el.value === 'true');
-      refreshRow(el, idx);
+      refreshRow(el, idx, prev);
     });
   });
   document.querySelectorAll('td.name input').forEach(function(el){
