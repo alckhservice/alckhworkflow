@@ -780,7 +780,7 @@ function startCloudSync(){
       state = remote;
       if(!state.locked) state.locked = {};
       state.order = sortMonthsChronologically(state.order);
-      render();
+      renderView();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       applyingRemote = false;
       setSyncStatus('Synced ✓');
@@ -914,15 +914,13 @@ function populateMonthSelect(){
   document.getElementById('btnDeleteMonth').disabled = state.order.length <= 1;
 }
 
+// Native date picker (one element) instead of a 32-option list per cell — the lists made
+// every redraw ~5,800 options heavier. Values are still stored as YYYY-MM-DD.
 function getDateDropdown(value, idx, field, locked){
   const dates = generateDateOptions();
-  let html = '<select class="dateSelect" data-idx="' + idx + '" data-field="' + field + '" ' + (locked?'disabled':'') + '>';
-  html += '<option value=""' + (value === '' ? ' selected' : '') + '>-- Select Date --</option>';
-  dates.forEach(function(d){
-    html += '<option value="' + d + '"' + (d === value ? ' selected' : '') + '>' + d + '</option>';
-  });
-  html += '</select>';
-  return html;
+  const bounds = dates.length ? ' min="' + dates[0] + '" max="' + dates[dates.length-1] + '"' : '';
+  return '<input type="date" class="dateSelect" value="' + escapeAttr(value || '') + '"' + bounds +
+         ' data-idx="' + idx + '" data-field="' + field + '" ' + (locked?'disabled':'') + '>';
 }
 
 function generateDateOptions(){
@@ -950,6 +948,13 @@ function generateDateOptions(){
     dates.push(year + '-' + m + '-' + da);
   }
   return dates;
+}
+
+// Set by renderView(): redraw without saving (search, filter, incoming cloud update).
+let skipSaveOnRender = false;
+function renderView(){
+  skipSaveOnRender = true;
+  try{ render(); } finally{ skipSaveOnRender = false; }
 }
 
 function render(){
@@ -1042,6 +1047,51 @@ function render(){
 
   populateMonthSelect();
   attachRowEvents();
+  if(!skipSaveOnRender) saveState();
+}
+
+// Recompute the summary cards and ring from all rows (cheap: no table redraw).
+function updateStats(){
+  const rows = currentRows();
+  let total=0, complete=0, zero=0, inprog=0, sumProg=0, pendingPCA=0, pendingBK=0, pendingTAX=0;
+  rows.forEach(function(row){
+    const prog = rowProgress(row);
+    total++; sumProg += prog;
+    if(prog >= 0.999) complete++; else if(prog <= 0.001) zero++; else inprog++;
+    if(groupProgress(row, GROUPS.pca) < 0.999) pendingPCA++;
+    if(groupProgress(row, GROUPS.bk) < 0.999) pendingBK++;
+    if(groupProgress(row, GROUPS.tax) < 0.999) pendingTAX++;
+  });
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statComplete').textContent = complete;
+  document.getElementById('statProgress').textContent = inprog;
+  document.getElementById('statZero').textContent = zero;
+  document.getElementById('statPendingPCA').textContent = pendingPCA;
+  document.getElementById('statPendingBK').textContent = pendingBK;
+  document.getElementById('statPendingTAX').textContent = pendingTAX;
+  const overall = total ? Math.round((sumProg/total)*100) : 0;
+  document.getElementById('overallPct').textContent = overall + '%';
+  document.getElementById('ringProg').style.strokeDashoffset = 194.8 - (overall/100)*194.8;
+}
+
+// After one status dropdown changes: restyle that dropdown, update its row's progress bar
+// and the totals, then save. Falls back to a full redraw when a status filter is on,
+// because the row may need to appear or disappear.
+function refreshRow(el, idx){
+  if(document.getElementById('statusFilter').value !== 'all'){ render(); return; }
+  const row = currentRows()[idx];
+  const field = el.dataset.field, v = row[field], dd = DROPDOWN_COLS[field];
+  el.classList.remove('done','na');
+  const cls = v === 'na' ? 'na' : (v === true ? 'done' : (dd && dd.pending ? 'done' : ''));
+  if(cls) el.classList.add(cls);
+  const prog = rowProgress(row), pct = Math.round(prog*100);
+  const tr = el.closest('tr');
+  tr.classList.remove('complete','zero');
+  if(prog >= 0.999) tr.classList.add('complete'); else if(prog <= 0.001) tr.classList.add('zero');
+  const bar = tr.querySelector('td.prog .bar span'); if(bar) bar.style.width = pct + '%';
+  const pctEl = tr.querySelector('td.prog .pct'); if(pctEl) pctEl.textContent = pct + '%';
+  updateStats();
+  if(pmCurrentGroup) pmRender();
   saveState();
 }
 
@@ -1072,7 +1122,7 @@ function attachRowEvents(){
       const idx = +el.dataset.idx;
       const field = el.dataset.field;
       currentRows()[idx][field] = (el.value === 'na') ? 'na' : (el.value === 'true');
-      render();
+      refreshRow(el, idx);
     });
   });
   document.querySelectorAll('td.name input').forEach(function(el){
@@ -1093,8 +1143,8 @@ function attachRowEvents(){
   });
 }
 
-document.getElementById('search').addEventListener('input', render);
-document.getElementById('statusFilter').addEventListener('change', render);
+document.getElementById('search').addEventListener('input', renderView);
+document.getElementById('statusFilter').addEventListener('change', renderView);
 
 document.getElementById('monthSelect').addEventListener('change', function(e){
   state.current = e.target.value;
