@@ -1831,10 +1831,30 @@ function exportSchedule(rows, opts){
   opts = opts || {};
   if(typeof XLSX === 'undefined' || !XLSX.utils){ alert('Excel library not loaded yet — please try again in a moment.'); return; }
   if(!rows.length){ alert('There are no companies to export.'); return; }
+  // ---- Summary cards (same figures as the cards on screen, for the companies in this file)
+  const sm = {active:0, done:0, prog:0, zero:0, pca:0, bk:0, tax:0, nIn:0, nOut:0, lead:0, sum:0};
+  rows.forEach(function(r){
+    if(isNewThisMonth(r)) sm.nIn++;
+    if(r.stopped_from && r.stopped_from === state.current) sm.nOut++;
+    if(isLead(r)) sm.lead++;
+    if(isOut(r)) return;
+    const pr = rowProgress(r);
+    sm.active++; sm.sum += pr;
+    if(pr >= 0.999) sm.done++; else if(pr <= 0.001) sm.zero++; else sm.prog++;
+    if(groupProgress(r, GROUPS.pca) < 0.999) sm.pca++;
+    if(groupProgress(r, GROUPS.bk) < 0.999) sm.bk++;
+    if(groupProgress(r, GROUPS.tax) < 0.999) sm.tax++;
+  });
+  const overall = sm.active ? Math.round((sm.sum / sm.active) * 10000) / 10000 : 0;
+  const now = new Date();
+  const stamp = String(now.getDate()).padStart(2,'0') + '/' + String(now.getMonth()+1).padStart(2,'0') + '/' + now.getFullYear() + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
   const aoa = [];
-  aoa.push([null,null,null,null,null,null,null,null,null,null,null,'Overall',
-    (function(){ const act = rows.filter(function(r){ return !isOut(r); }); return Math.round((act.reduce(function(s,r){return s+rowProgress(r);},0)/(act.length||1))*10000)/10000; })()]);
+  aoa.push(['ALCKH Working Report — ' + state.current]);
+  aoa.push(['Exported ' + stamp + ' · ' + (opts.view || 'All companies') + ' · ' + rows.length + ' compan' + (rows.length === 1 ? 'y' : 'ies') + ' in this file']);
+  aoa.push(['SUMMARY', 'Active', 'Fully done', 'In progress', 'Not started', 'PCA pending', 'BK pending', 'TAX pending', 'New in', 'Stopped', 'Leads', 'Overall %']);
+  aoa.push([null, sm.active, sm.done, sm.prog, sm.zero, sm.pca, sm.bk, sm.tax, sm.nIn, sm.nOut, sm.lead, overall]);
   aoa.push([]);
+  const HDR = aoa.length; // group-header row; the column-header row follows it
   aoa.push(['Company','PCA',null,null,'BK',null,null,null,null,null,null,null,null,'TAX',null,null,null,'Progess']);
   aoa.push([null,'Import','Export','PCA %','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','BK %','E-filling','Separate Bill','Tax Payment','TAX %',null,'Plan Finish','Actual Finish Date','Review By','Confirmed By','Engagement'].concat(opts.extra ? [opts.extra.label] : []));
   rows.forEach(function(row, ri){
@@ -1856,10 +1876,13 @@ function exportSchedule(rows, opts){
   });
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!merges'] = [
-    {s:{r:2,c:1},e:{r:2,c:3}},
-    {s:{r:2,c:4},e:{r:2,c:12}},
-    {s:{r:2,c:13},e:{r:2,c:16}}
+    {s:{r:0,c:0},e:{r:0,c:11}},
+    {s:{r:1,c:0},e:{r:1,c:11}},
+    {s:{r:HDR,c:1},e:{r:HDR,c:3}},
+    {s:{r:HDR,c:4},e:{r:HDR,c:12}},
+    {s:{r:HDR,c:13},e:{r:HDR,c:16}}
   ];
+  const oc = ws[XLSX.utils.encode_cell({r:3, c:11})]; if(oc) oc.z = '0%';
   ws['!cols'] = [{wch:52}].concat(new Array(16).fill({wch:11})).concat([{wch:10},{wch:13},{wch:16},{wch:14},{wch:14},{wch:34}]).concat(opts.extra ? [{wch:50}] : []);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, state.current.slice(0,31) || 'Schedule');
@@ -1877,7 +1900,7 @@ document.getElementById('btnExport').addEventListener('click', function(){
   if(rv) parts.push('Review ' + (rv === '__blank__' ? 'blank' : rv));
   if(cf) parts.push('Confirmed ' + (cf === '__blank__' ? 'blank' : cf));
   if(document.getElementById('search').value.trim()) parts.push('search');
-  exportSchedule(rows, {suffix: parts.join(' ')});
+  exportSchedule(rows, {suffix: parts.join(' '), view: parts.length ? 'Filtered: ' + parts.join(', ') : 'All companies'});
 });
 document.getElementById('search').addEventListener('input', updateExportLabel);
 document.getElementById('statusFilter').addEventListener('change', updateExportLabel);
@@ -1909,7 +1932,9 @@ document.getElementById('fileInput').addEventListener('change', function(e){
       const ws = wb.Sheets[sheetName];
       const aoa = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
       const newRows = [];
-      for(let r=4; r<aoa.length; r++){
+      let start = 4; // older files: headers on rows 3-4
+      for(let h = 0; h < Math.min(aoa.length, 15); h++){ const l = aoa[h] || []; if(l[1] === 'Import' && l[2] === 'Export'){ start = h + 1; break; } }
+      for(let r=start; r<aoa.length; r++){
         const line = aoa[r];
         if(!line || !line[0]) continue;
         const row = {name: String(line[0]).trim()};
@@ -2056,9 +2081,10 @@ function pmExportExcel(){
   const g = pmCurrentGroup; if(!g || !pmLastShown.length) return;
   const rows = currentRows();
   const list = pmLastShown.filter(function(r){ return rows[r.idx]; });
-  if(g === 'inout'){ exportSchedule(list.map(function(r){ return rows[r.idx]; }), {suffix:'Clients In-Out'}); return; }
+  if(g === 'inout'){ exportSchedule(list.map(function(r){ return rows[r.idx]; }), {suffix:'Clients In-Out', view:'Clients In / Out list'}); return; }
   exportSchedule(list.map(function(r){ return rows[r.idx]; }), {
     suffix: PM_GROUP_NAMES[g] + ' Pending',
+    view: PM_GROUP_NAMES[g] + ' Pending list',
     extra: {label: PM_GROUP_NAMES[g] + ' pending items', values: list.map(function(r){ return r.items.join(', '); })}
   });
 }
