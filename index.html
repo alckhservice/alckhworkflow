@@ -284,7 +284,7 @@
     box-shadow:0 8px 30px rgba(40,50,48,0.08);
   }
   .tablescroll{overflow:auto; max-height:70vh;}
-  table{border-collapse:collapse; width:100%; min-width:1250px; table-layout:fixed;}
+  table{border-collapse:collapse; width:100%; min-width:1170px; table-layout:fixed;}
   thead{position:sticky; top:0; z-index:5; box-shadow:0 2px 6px rgba(40,50,48,0.08);}
   thead tr.grp th{
     font-family:var(--mono);
@@ -327,6 +327,7 @@
   .sortBtn:hover{color:var(--ink); border-color:var(--pine);}
   .sortBtn.disabled{opacity:.35; cursor:default; pointer-events:none;}
   thead tr.cols th.prog-h{}
+  thead tr.cols th.signoff-h{padding-left:1px; padding-right:1px; font-size:10px; letter-spacing:-0.1px;}
   thead tr.cols th.grouppct-h{width:34px; background:#eef3f1;}
   td.grouppct{font-family:var(--mono); font-size:11.5px; font-weight:600; background:rgba(47,93,79,0.04);}
   td.grouppct.full{color:var(--pine);}
@@ -405,7 +406,7 @@
   .statusSel.done{background:var(--yellow); border-color:var(--yellow-deep); color:#3a2f00;}
   .statusSel.na{background:var(--brass); border-color:var(--brass-deep); color:#fff;}
   .statusSel:disabled{cursor:default; opacity:.8;}
-  .textSel{font-family:inherit; font-size:9.5px; padding:2px 2px; border-radius:5px; border:1.5px solid var(--line);
+  .textSel{-webkit-appearance:none; -moz-appearance:none; appearance:none; text-align:center; text-overflow:ellipsis; font-family:inherit; font-size:9px; padding:3px 2px; border-radius:5px; border:1.5px solid var(--line);
     background:var(--paper-raised); color:var(--ink); cursor:pointer; width:100%; box-sizing:border-box;}
   .textSel.set{background:var(--pine-soft); border-color:var(--pine); color:var(--pine);}
   .textSel:disabled{cursor:default; opacity:.8;}
@@ -642,8 +643,8 @@
         <col style="width:4.6%;">
         <col style="width:4.8%;">
         <col style="width:7%;">
-        <col style="width:7.5%;">
-        <col style="width:7.5%;">
+        <col style="width:4.3%;">
+        <col style="width:4.3%;">
         <col style="width:1.8%;">
       </colgroup>
       <thead>
@@ -675,8 +676,8 @@
           <th>Separate<br>Bill</th>
           <th>Tax<br>Payment</th>
           <th class="prog-h">Progress</th>
-          <th>Review By</th>
-          <th>Confirmed By</th>
+          <th class="signoff-h">Review<br>By</th>
+          <th class="signoff-h">Confirmed<br>By</th>
           <th></th>
         </tr>
       </thead>
@@ -1044,7 +1045,7 @@ function signoffSelect(c, v, idx, locked){
   let opts = '<option value=""' + (v ? '' : ' selected') + '>-</option>';
   const list = (v && c.options.indexOf(v) < 0) ? c.options.concat([v]) : c.options; // keep an unknown saved name visible
   list.forEach(function(o){ opts += '<option value="' + escapeAttr(o) + '"' + (v === o ? ' selected' : '') + '>' + escapeAttr(o) + '</option>'; });
-  return '<select class="textSel' + (v ? ' set' : '') + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked ? 'disabled' : '') + '>' + opts + '</select>';
+  return '<select class="textSel' + (v ? ' set' : '') + '" title="' + escapeAttr(v || c.label) + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked ? 'disabled' : '') + '>' + opts + '</select>';
 }
 
 // The 13 checklist items. Plan Finish / Actual Finish are dates, not tasks, so they are
@@ -1298,6 +1299,7 @@ function paintRowCells(idx, row){
       if(v && !Array.prototype.some.call(el.options, function(o){ return o.value === v; })){ const o = document.createElement('option'); o.value = o.textContent = v; el.appendChild(o); }
       if(el.value !== (v || '')) el.value = v || '';
       el.classList.toggle('set', !!v);
+      el.title = v || '';
     } else if(f === 'name' && document.activeElement !== el){
       el.value = v;
     }
@@ -1346,6 +1348,7 @@ function attachRowEvents(){
       const prev = currentRows()[idx][field];
       currentRows()[idx][field] = el.value || '';
       el.classList.toggle('set', !!el.value);
+      el.title = el.value || '';
       saveCell(idx, field, prev);
     });
   });
