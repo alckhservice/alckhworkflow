@@ -439,6 +439,9 @@
     box-sizing:border-box;
   }
   .dateSelect:disabled{cursor:default; opacity:.8;}
+  .dateSelect.ontime{background:var(--yellow); border-color:var(--yellow-deep); color:#3a2f00; font-weight:600;}
+  .dateSelect.late{background:#c0392b; border-color:#a3271b; color:#fff; font-weight:600;}
+  .dateSelect.late::-webkit-calendar-picker-indicator{filter:invert(1);}
   .dateSelect{padding:2px 1px; font-size:9px; letter-spacing:-0.2px;}
   .dateSelect::-webkit-datetime-edit{padding:0;}
   .dateSelect::-webkit-datetime-edit-fields-wrapper{padding:0;}
@@ -1347,10 +1350,28 @@ function populateMonthSelect(){
 
 // Native date picker (one element) instead of a 32-option list per cell — the lists made
 // every redraw ~5,800 options heavier. Values are still stored as YYYY-MM-DD.
-function getDateDropdown(value, idx, field, locked){
+// Actual Finish vs Plan Finish: on or before plan → yellow, after plan → red (needs both dates).
+function finishClass(row){
+  const a = row && row.actual_finish, p = row && row.plan_finish;
+  if(!a || !p) return '';
+  return a <= p ? 'ontime' : 'late'; // ISO yyyy-mm-dd strings compare correctly
+}
+function finishTitle(row){
+  const c = finishClass(row);
+  return c === 'ontime' ? 'Finished on time (on or before Plan Finish)' : (c === 'late' ? 'Finished late (after Plan Finish ' + row.plan_finish + ')' : '');
+}
+function repaintFinish(idx, row){
+  const el = document.querySelector('#tbody .dateSelect[data-idx="' + idx + '"][data-field="actual_finish"]');
+  if(!el) return;
+  const c = finishClass(row);
+  el.classList.toggle('ontime', c === 'ontime');
+  el.classList.toggle('late', c === 'late');
+  el.title = finishTitle(row);
+}
+function getDateDropdown(value, idx, field, locked, row){
   const dates = generateDateOptions();
   const bounds = dates.length ? ' min="' + dates[0] + '" max="' + dates[dates.length-1] + '"' : '';
-  return '<input type="date" class="dateSelect" value="' + escapeAttr(value || '') + '"' + bounds +
+  return '<input type="date" class="dateSelect' + (field === 'actual_finish' && finishClass(row) ? ' ' + finishClass(row) : '') + '"' + (field === 'actual_finish' && finishTitle(row) ? ' title="' + escapeAttr(finishTitle(row)) + '"' : '') + ' value="' + escapeAttr(value || '') + '"' + bounds +
          ' data-idx="' + idx + '" data-field="' + field + '" ' + (locked?'disabled':'') + '>';
 }
 
@@ -1438,9 +1459,9 @@ function render(){
     COLS.forEach(c => {
       // Handle new client progress fields (dates and percentage)
       if(c.key === 'plan_finish'){
-        tds += '<td>' + getDateDropdown(row.plan_finish || '', idx, 'plan_finish', locked) + '</td>';
+        tds += '<td>' + getDateDropdown(row.plan_finish || '', idx, 'plan_finish', locked, row) + '</td>';
       } else if(c.key === 'actual_finish'){
-        tds += '<td>' + getDateDropdown(row.actual_finish || '', idx, 'actual_finish', locked) + '</td>';
+        tds += '<td>' + getDateDropdown(row.actual_finish || '', idx, 'actual_finish', locked, row) + '</td>';
       } else {
         const dd = DROPDOWN_COLS[c.key];
         if(dd){
@@ -1555,6 +1576,7 @@ function paintRowCells(idx, row){
       paintSelect(el, v, DROPDOWN_COLS[f]);
     } else if(el.classList.contains('dateSelect')){
       if(el.value !== (v || '')) el.value = v || '';
+      if(f === 'actual_finish') repaintFinish(idx, row);
     } else if(el.classList.contains('textSel')){
       el.dataset.saved = v || '';
       if(document.activeElement !== el){ if(el.value !== (v || '')) el.value = v || ''; el.classList.toggle('set', !!v); el.title = v || ''; }
@@ -1588,6 +1610,7 @@ function attachRowEvents(){
       const field = el.dataset.field;
       const prev = currentRows()[idx][field];
       currentRows()[idx][field] = el.value;
+      repaintFinish(idx, currentRows()[idx]);
       saveCell(idx, field, prev);
     });
   });
