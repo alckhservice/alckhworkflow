@@ -838,10 +838,10 @@ function pushToCloud(){
 }
 
 // One-time data fixes, run once against the cloud copy and remembered in state.fixes.
-// signoffCarry1: blank Review By / Confirmed By cells take the name from the previous month
-// (same company), so months created before names were carried forward get filled in.
-function runOneTimeFixes(){
-  if(!state || !state.order || (state.fixes && state.fixes.signoffCarry1)) return;
+// Each fills BLANK cells only, from the previous month's value for the same company:
+//   signoffCarry1    → Review By / Confirmed By
+//   planFinishCarry1 → Plan Finish
+function carryBlanksForward(keys){
   let filled = 0;
   for(let i = 1; i < state.order.length; i++){
     const prev = state.months[state.order[i-1]], cur = state.months[state.order[i]];
@@ -850,11 +850,25 @@ function runOneTimeFixes(){
     prev.rows.forEach(function(r){ if(r && r.name) byName[String(r.name).trim().toLowerCase()] = r; });
     cur.rows.forEach(function(r){
       const p = r && byName[String(r.name || '').trim().toLowerCase()]; if(!p) return;
-      SIGNOFF_COLS.forEach(function(c){ if(!r[c.key] && p[c.key]){ r[c.key] = p[c.key]; filled++; } });
+      keys.forEach(function(k){ if(!r[k] && p[k]){ r[k] = p[k]; filled++; } });
     });
   }
-  state.fixes = Object.assign({}, state.fixes, {signoffCarry1: true});
-  console.log('Sign-off names carried forward:', filled);
+  return filled;
+}
+function runOneTimeFixes(){
+  if(!state || !state.order) return;
+  const done = state.fixes || {};
+  const todo = [
+    {flag:'signoffCarry1', keys: SIGNOFF_COLS.map(function(c){ return c.key; })},
+    {flag:'planFinishCarry1', keys: ['plan_finish']}
+  ].filter(function(f){ return !done[f.flag]; });
+  if(!todo.length) return;
+  const fixes = Object.assign({}, done);
+  todo.forEach(function(f){
+    console.log('One-time fill ' + f.flag + ':', carryBlanksForward(f.keys));
+    fixes[f.flag] = true;
+  });
+  state.fixes = fixes;
   render(); // saves to the cloud
 }
 
