@@ -1616,7 +1616,7 @@ document.getElementById('btnRenameMonth').addEventListener('click', function(){
 
 document.getElementById('btnNewMonth').addEventListener('click', function(){
   const suggested = nextMonthGuess(state.order[state.order.length-1]);
-  const name = prompt('Name the new month (starts with the same company list, all tasks unchecked):', suggested);
+  const name = prompt('Name the new month (same company list and Review By / Confirmed By names, all tasks unchecked):', suggested);
   if(!name || !name.trim()) return;
   const clean = name.trim();
   if(state.months[clean]){ alert('That month already exists — switch to it from the dropdown instead.'); return; }
@@ -1626,6 +1626,7 @@ document.getElementById('btnNewMonth').addEventListener('click', function(){
     if(r.engaged_from) nr.engaged_from = r.engaged_from;
     if(r.stopped_from) nr.stopped_from = r.stopped_from;
     if(r.lead_from) nr.lead_from = r.lead_from;
+    SIGNOFF_COLS.forEach(function(c){ if(r[c.key]) nr[c.key] = r[c.key]; }); // person in charge stays until changed manually
     COLS.forEach(function(c){ nr[c.key] = (DROPDOWN_COLS[c.key] && DROPDOWN_COLS[c.key].pending) ? 'na' : false; });
     return nr;
   });
