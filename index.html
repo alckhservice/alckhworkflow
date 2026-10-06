@@ -406,10 +406,19 @@
   .statusSel.done{background:var(--yellow); border-color:var(--yellow-deep); color:#3a2f00;}
   .statusSel.na{background:var(--brass); border-color:var(--brass-deep); color:#fff;}
   .statusSel:disabled{cursor:default; opacity:.8;}
-  .textSel{-webkit-appearance:none; -moz-appearance:none; appearance:none; text-align:center; text-overflow:ellipsis; font-family:inherit; font-size:9px; padding:3px 2px; border-radius:5px; border:1.5px solid var(--line);
+  .textSel{font-family:inherit; font-size:9px; padding:3px 2px; border-radius:5px; border:1.5px solid var(--line); background:var(--paper-raised); color:var(--ink); width:100%; box-sizing:border-box; text-align:center; text-overflow:ellipsis; cursor:text;}
+  .textSel::placeholder{color:var(--ink-soft); opacity:.7;}
+  .textSel:focus{outline:none; border-color:var(--brass); background:#fff; color:var(--ink); text-align:left;}
     background:var(--paper-raised); color:var(--ink); cursor:pointer; width:100%; box-sizing:border-box;}
   .textSel.set{background:var(--pine-soft); border-color:var(--pine); color:var(--pine);}
   .textSel:disabled{cursor:default; opacity:.8;}
+  #soPick{position:fixed; z-index:10000; display:none; min-width:170px; max-height:230px; overflow:auto; background:#fff; border:1px solid var(--line); border-radius:8px; box-shadow:0 10px 28px rgba(28,36,34,.18); padding:4px; font-family:var(--sans); font-size:12.5px;}
+  #soPick.show{display:block;}
+  #soPick .so-opt{padding:6px 10px; border-radius:6px; cursor:pointer; white-space:nowrap;}
+  #soPick .so-opt.on{background:var(--pine-soft); color:var(--pine);}
+  #soPick .so-opt b{font-weight:700; text-decoration:underline;}
+  #soPick .so-clear{color:var(--rust); font-size:11.5px; border-bottom:1px solid var(--line); border-radius:6px 6px 0 0; margin-bottom:2px;}
+  #soPick .so-none{padding:6px 10px; color:var(--ink-soft); font-style:italic;}
 
   .dateSelect{
     font-family:inherit;
@@ -1139,11 +1148,86 @@ const SIGNOFF_COLS = [
 ];
 function signoffSelect(c, v, idx, locked){
   v = v || '';
-  let opts = '<option value=""' + (v ? '' : ' selected') + '>-</option>';
-  const list = (v && c.options.indexOf(v) < 0) ? c.options.concat([v]) : c.options; // keep an unknown saved name visible
-  list.forEach(function(o){ opts += '<option value="' + escapeAttr(o) + '"' + (v === o ? ' selected' : '') + '>' + escapeAttr(o) + '</option>'; });
-  return '<select class="textSel' + (v ? ' set' : '') + '" title="' + escapeAttr(v || c.label) + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked ? 'disabled' : '') + '>' + opts + '</select>';
+  return '<input type="text" class="textSel' + (v ? ' set' : '') + '" value="' + escapeAttr(v) + '" placeholder="-" autocomplete="off" spellcheck="false" title="' + escapeAttr(v || ('Type to search ' + c.label)) + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked ? 'disabled' : '') + '>';
 }
+
+// ---- Type-to-search picker for the sign-off cells ----
+const soPick = (function(){ const d = document.createElement('div'); d.id = 'soPick'; document.body.appendChild(d); return d; })();
+let soEl = null, soMatches = [], soOn = 0;
+function soOptions(field){ const c = SIGNOFF_COLS.find(function(x){ return x.key === field; }); return c ? c.options : []; }
+function soNorm(t){ return String(t || '').toLowerCase().replace(/^(mrs?|ms)\.?\s*/, ''); }
+function soFilter(el){
+  const q = el.value.trim().toLowerCase();
+  const opts = soOptions(el.dataset.field);
+  if(!q || q === String(el.dataset.saved || '').toLowerCase()) return opts.slice();
+  return opts.filter(function(o){ return o.toLowerCase().includes(q); })
+             .sort(function(a, b){ return (soNorm(a).startsWith(q) ? 0 : 1) - (soNorm(b).startsWith(q) ? 0 : 1); });
+}
+function soHighlight(name, q){
+  const e = pmEsc(name); if(!q) return e;
+  const i = name.toLowerCase().indexOf(q.toLowerCase()); if(i < 0) return e;
+  return pmEsc(name.slice(0, i)) + '<b>' + pmEsc(name.slice(i, i + q.length)) + '</b>' + pmEsc(name.slice(i + q.length));
+}
+function soPaint(){
+  if(!soEl) return;
+  soMatches = soFilter(soEl);
+  if(soOn >= soMatches.length) soOn = Math.max(0, soMatches.length - 1);
+  const q = soEl.value.trim() === soEl.dataset.saved ? '' : soEl.value.trim();
+  let h = soEl.dataset.saved ? '<div class="so-opt so-clear" data-clear="1">Clear</div>' : '';
+  if(!soMatches.length) h += '<div class="so-none">No matching name</div>';
+  soMatches.forEach(function(o, i){ h += '<div class="so-opt' + (i === soOn ? ' on' : '') + '" data-i="' + i + '">' + soHighlight(o, q) + '</div>'; });
+  soPick.innerHTML = h;
+  const r = soEl.getBoundingClientRect();
+  soPick.classList.add('show');
+  const ph = soPick.offsetHeight, below = window.innerHeight - r.bottom;
+  soPick.style.top = (below < ph + 8 && r.top > ph + 8 ? r.top - ph - 4 : r.bottom + 4) + 'px';
+  soPick.style.left = Math.max(8, Math.min(r.left, window.innerWidth - soPick.offsetWidth - 8)) + 'px';
+  const on = soPick.querySelector('.so-opt.on'); if(on) on.scrollIntoView({block:'nearest'});
+}
+function soClose(){ soPick.classList.remove('show'); soEl = null; }
+function soCommit(el, val){
+  const idx = +el.dataset.idx, field = el.dataset.field, row = currentRows()[idx];
+  val = val || '';
+  el.value = val; el.classList.toggle('set', !!val); el.title = val || '';
+  el.dataset.saved = val;
+  if(!row || (row[field] || '') === val) return;
+  const prev = row[field];
+  row[field] = val;
+  saveCell(idx, field, prev);
+}
+function soBind(el){
+  el.dataset.saved = el.value;
+  el.addEventListener('focus', function(){ soEl = el; soOn = 0; el.select(); soPaint(); });
+  el.addEventListener('input', function(){ soOn = 0; soPaint(); });
+  el.addEventListener('keydown', function(e){
+    if(soEl !== el) return;
+    if(e.key === 'ArrowDown'){ e.preventDefault(); soOn = Math.min(soOn + 1, soMatches.length - 1); soPaint(); }
+    else if(e.key === 'ArrowUp'){ e.preventDefault(); soOn = Math.max(soOn - 1, 0); soPaint(); }
+    else if(e.key === 'Enter'){ e.preventDefault(); if(!el.value.trim()) soCommit(el, ''); else if(soMatches[soOn]) soCommit(el, soMatches[soOn]); el.blur(); }
+    else if(e.key === 'Escape'){ e.preventDefault(); el.value = el.dataset.saved || ''; el.blur(); }
+    else if(e.key === 'Tab'){ const t = el.value.trim(); if(t && t !== el.dataset.saved && soMatches[soOn]) soCommit(el, soMatches[soOn]); }
+  });
+  el.addEventListener('blur', function(){
+    const t = el.value.trim();
+    if(!t) soCommit(el, '');
+    else {
+      const exact = soOptions(el.dataset.field).find(function(o){ return o.toLowerCase() === t.toLowerCase(); });
+      if(exact) soCommit(el, exact);
+      else if(t !== el.dataset.saved && soMatches.length === 1) soCommit(el, soMatches[0]); // one clear match: take it
+      else el.value = el.dataset.saved || ''; // not a known name: keep what was saved
+    }
+    if(soEl === el) soClose();
+  });
+}
+soPick.addEventListener('mousedown', function(e){
+  const opt = e.target.closest('.so-opt'); if(!opt || !soEl) return;
+  e.preventDefault();
+  const el = soEl;
+  soCommit(el, opt.dataset.clear ? '' : soMatches[+opt.dataset.i]);
+  el.blur();
+});
+window.addEventListener('scroll', function(){ if(soEl) soPaint(); }, true);
+window.addEventListener('resize', function(){ if(soEl) soPaint(); });
 
 // The 13 checklist items. Plan Finish / Actual Finish are dates, not tasks, so they are
 // kept out of progress % and out of the status columns of the Excel export/import.
@@ -1415,10 +1499,8 @@ function paintRowCells(idx, row){
     } else if(el.classList.contains('dateSelect')){
       if(el.value !== (v || '')) el.value = v || '';
     } else if(el.classList.contains('textSel')){
-      if(v && !Array.prototype.some.call(el.options, function(o){ return o.value === v; })){ const o = document.createElement('option'); o.value = o.textContent = v; el.appendChild(o); }
-      if(el.value !== (v || '')) el.value = v || '';
-      el.classList.toggle('set', !!v);
-      el.title = v || '';
+      el.dataset.saved = v || '';
+      if(document.activeElement !== el){ if(el.value !== (v || '')) el.value = v || ''; el.classList.toggle('set', !!v); el.title = v || ''; }
     } else if(f === 'name' && document.activeElement !== el){
       el.value = v;
     }
@@ -1460,17 +1542,7 @@ function attachRowEvents(){
       render();
     });
   });
-  document.querySelectorAll('.textSel').forEach(function(el){
-    el.addEventListener('change', function(){
-      const idx = +el.dataset.idx;
-      const field = el.dataset.field;
-      const prev = currentRows()[idx][field];
-      currentRows()[idx][field] = el.value || '';
-      el.classList.toggle('set', !!el.value);
-      el.title = el.value || '';
-      saveCell(idx, field, prev);
-    });
-  });
+  document.querySelectorAll('.textSel').forEach(soBind);
   document.querySelectorAll('.statusSel').forEach(function(el){
     el.addEventListener('change', function(){
       const idx = +el.dataset.idx;
