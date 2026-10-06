@@ -438,7 +438,27 @@
   tr.complete .pct{color:var(--pine); font-weight:600;}
   tr.zero .pct{color:var(--rust);}
 
-  td.rowactions{width:28px;}
+  td.rowactions{width:28px; white-space:nowrap;}
+  .namewrap{display:flex; align-items:center; gap:6px; min-width:0;}
+  .namewrap input{flex:1; min-width:0;}
+  .eng-badge{flex:none; font-family:var(--mono); font-size:9px; font-weight:700; letter-spacing:.04em; padding:2px 6px; border-radius:var(--r-pill);}
+  .eng-badge.new{background:var(--pine-soft); color:var(--pine); border:1px solid var(--pine);}
+  .eng-badge.out{background:#c0392b; color:#fff;}
+  tbody tr.stopped td{background:#fbe1de !important;}
+  tbody tr.stopped td.name{box-shadow:inset 4px 0 0 #c0392b;}
+  tbody tr.stopped td.name input{color:#a3271b; font-weight:600;}
+  tbody tr.stopped select, tbody tr.stopped input[type=date]{opacity:.55;}
+  .stopped-tag{display:inline-block; max-width:100%; background:#c0392b; color:#fff; font-size:9px; font-weight:600; padding:2px 6px; border-radius:8px; white-space:normal; text-align:center; line-height:1.15;}
+  .eng-toggle{cursor:pointer; opacity:0; transition:opacity .12s; vertical-align:-2px; margin-right:4px; color:var(--rust);}
+  tbody tr:hover .eng-toggle{opacity:.65;}
+  .eng-toggle:hover{opacity:1 !important;}
+  tbody tr.stopped .eng-toggle{opacity:.9; color:var(--pine);}
+  .stat.inout .n .in{color:var(--pine);}
+  .stat.inout .n .out{color:#c0392b; margin-left:6px;}
+  .pmodal .pm-kind{display:inline-block; padding:2px 8px; border-radius:var(--r-pill); font-size:11px; font-weight:600;}
+  .pmodal .pm-kind.new{background:var(--pine-soft); color:var(--pine);}
+  .pmodal .pm-kind.out{background:#c0392b; color:#fff;}
+  .pmodal .pm-kind.old{background:#fbe1de; color:#a3271b;}
   .del-row{color:var(--ink-soft); cursor:pointer; font-size:14px; opacity:0; transition:opacity .12s;}
   tbody tr:hover .del-row{opacity:0.6;}
   .del-row:hover{opacity:1 !important; color:var(--rust);}
@@ -585,13 +605,14 @@
   </div>
 
   <div class="stats">
-    <div class="stat"><div class="n" id="statTotal">0</div><div class="l">TOTAL COMPANIES</div></div>
+    <div class="stat"><div class="n" id="statTotal">0</div><div class="l">ACTIVE COMPANIES</div></div>
     <div class="stat complete"><div class="n" id="statComplete">0</div><div class="l">FULLY DONE (11/11)</div></div>
     <div class="stat progress"><div class="n" id="statProgress">0</div><div class="l">IN PROGRESS</div></div>
     <div class="stat notstarted"><div class="n" id="statZero">0</div><div class="l">NOT STARTED</div></div>
     <div class="stat progress" data-pending="pca" title="Double-click to see pending clients"><div class="n" id="statPendingPCA">0</div><div class="l">PCA PENDING</div></div>
     <div class="stat progress" data-pending="bk" title="Double-click to see pending clients"><div class="n" id="statPendingBK">0</div><div class="l">BK PENDING</div></div>
     <div class="stat progress" data-pending="tax" title="Double-click to see pending clients"><div class="n" id="statPendingTAX">0</div><div class="l">TAX PENDING</div></div>
+    <div class="stat inout" data-pending="inout" title="Double-click to see clients engaged / stopped this month"><div class="n" id="statInOut"><span class="in">+0</span><span class="out">&minus;0</span></div><div class="l">NEW IN / STOPPED THIS MONTH</div></div>
   </div>
 
 
@@ -611,6 +632,9 @@
       <option value="complete">Complete only</option>
       <option value="progress">In progress</option>
       <option value="zero">Not started</option>
+      <option value="active">Active clients only</option>
+      <option value="new">New engaged this month</option>
+      <option value="stopped">Stopped engaged</option>
     </select>
     <select class="statusfilter" id="planFinishSort">
       <option value="">Sort by Plan Finish...</option>
@@ -649,7 +673,7 @@
         <col style="width:7%;">
         <col style="width:4.3%;">
         <col style="width:4.3%;">
-        <col style="width:1.8%;">
+        <col style="width:3%;">
       </colgroup>
       <thead>
         <tr class="grp">
@@ -964,7 +988,7 @@ function patchRemote(remote){
   for(const m in remote.months){ if(m !== cur && J(remote.months[m]) !== J(state.months[m])) return false; }
   const a = state.months[cur] && state.months[cur].rows, b = remote.months[cur] && remote.months[cur].rows;
   if(!a || !b || a.length !== b.length) return false;
-  for(let i = 0; i < a.length; i++){ if(!a[i] || !b[i] || a[i].name !== b[i].name) return false; }
+  for(let i = 0; i < a.length; i++){ if(!a[i] || !b[i] || a[i].name !== b[i].name || (a[i].stopped_from||'') !== (b[i].stopped_from||'') || (a[i].engaged_from||'') !== (b[i].engaged_from||'')) return false; }
   if(document.getElementById('statusFilter').value !== 'all') return false; // rows may need to appear/disappear
   state = remote;
   for(let i = 0; i < b.length; i++){
@@ -1038,6 +1062,36 @@ const DROPDOWN_COLS = {
   bill_sent: {no:'Not Yet Sent', yes:'Sent', pending:false},
   tax_payment: {no:'Unpaid', yes:'Paid', pending:false}
 };
+
+// ---- Client in / out ----
+// row.engaged_from = month the company was registered (counts as NEW in that month)
+// row.stopped_from = month it stopped being engaged; the row stays (red) but no longer counts
+function shortMonth(label){ const m = String(label || '').match(/^([A-Za-z]{3})[A-Za-z]*\s+(\d{4})$/); return m ? m[1] + ' ' + m[2] : String(label || ''); }
+function isStopped(row){ return !!(row && row.stopped_from); }
+function isNewThisMonth(row){ return !!(row && row.engaged_from && row.engaged_from === state.current); }
+function engagementText(row){
+  if(isStopped(row)) return 'Stopped engaged from ' + row.stopped_from;
+  if(isNewThisMonth(row)) return 'New engaged in ' + row.engaged_from;
+  return '';
+}
+function setStopped(idx, stop){
+  const rows = currentRows(), row = rows[idx]; if(!row) return;
+  const from = state.current, p = state.order.indexOf(from), name = row.name;
+  const msg = stop
+    ? 'Mark "' + name + '" as STOPPED ENGAGED from ' + from + '?\n\nThe company stays in the table (highlighted red) but no longer counts toward progress or pending totals. Later months will show it as stopped too.'
+    : 'Re-activate "' + name + '" from ' + from + '?\n\nIt will count toward progress again in this month and later months.';
+  if(!confirm(msg)) return;
+  state.order.forEach(function(m, i){
+    if(i < p || !state.months[m]) return;
+    state.months[m].rows.forEach(function(r, ri){
+      const same = (m === from) ? (ri === idx) : (r.name === name);
+      if(!same) return;
+      if(stop){ if(!r.stopped_from || state.order.indexOf(r.stopped_from) > p) r.stopped_from = from; }
+      else delete r.stopped_from;
+    });
+  });
+  render();
+}
 
 // Sign-off columns shown after Progress. Not checklist tasks: they never affect progress %.
 const SIGNOFF_COLS = [
@@ -1168,28 +1222,32 @@ function render(){
 
   rows.forEach((row, idx) => {
     const prog = rowProgress(row);
-    total++; sumProg += prog;
-    if(prog >= 0.999) complete++;
+    const stopped = isStopped(row);
+    if(!stopped){ total++; sumProg += prog; }
+    if(stopped){} else if(prog >= 0.999) complete++;
     else if(prog <= 0.001) zero++;
     else inprog++;
 
     const pcaPct = groupProgress(row, GROUPS.pca);
     const bkPct = groupProgress(row, GROUPS.bk);
     const taxPct = groupProgress(row, GROUPS.tax);
-    if(pcaPct < 0.999) pendingPCA++;
-    if(bkPct < 0.999) pendingBK++;
-    if(taxPct < 0.999) pendingTAX++;
+    if(!stopped && pcaPct < 0.999) pendingPCA++;
+    if(!stopped && bkPct < 0.999) pendingBK++;
+    if(!stopped && taxPct < 0.999) pendingTAX++;
 
-    if(search && !row.name.toLowerCase().includes(search)) return;
-    if(filter === 'complete' && prog < 0.999) return;
-    if(filter === 'progress' && (prog >= 0.999 || prog <= 0.001)) return;
-    if(filter === 'zero' && prog > 0.001) return;
+    if(!rowMatchesView(row)) return;
 
     const tr = document.createElement('tr');
-    if(prog >= 0.999) tr.className = 'complete';
+    if(stopped) tr.className = 'stopped';
+    else if(prog >= 0.999) tr.className = 'complete';
     else if(prog <= 0.001) tr.className = 'zero';
 
-    let tds = '<td class="name"><input value="' + escapeAttr(row.name) + '" data-idx="' + idx + '" data-field="name" ' + (locked?'disabled':'') + '></td>';
+    const pageLocked = locked;
+    { const locked = pageLocked || stopped; // a stopped company's cells are read-only
+    let badge = '';
+    if(stopped) badge = '<span class="eng-badge out" title="Stopped engaged from ' + escapeAttr(row.stopped_from) + '">STOPPED</span>';
+    else if(isNewThisMonth(row)) badge = '<span class="eng-badge new" title="New engaged in ' + escapeAttr(row.engaged_from) + '">NEW</span>';
+    let tds = '<td class="name"><div class="namewrap"><input value="' + escapeAttr(row.name) + '" data-idx="' + idx + '" data-field="name" ' + (locked?'disabled':'') + '>' + badge + '</div></td>';
     function groupPctCell(p){
       const pct = Math.round(p*100);
       const cls = pct >= 100 ? 'full' : (pct <= 0 ? 'zero' : 'mid');
@@ -1216,11 +1274,16 @@ function render(){
       }
     });
     const pctDisplay = Math.round(prog*100);
-    tds += '<td class="prog"><div class="progcell"><div class="bar"><span style="width:' + pctDisplay + '%"></span></div><span class="pct">' + pctDisplay + '%</span></div></td>';
+    if(stopped) tds += '<td class="prog"><span class="stopped-tag" title="Stopped engaged from ' + escapeAttr(row.stopped_from) + '">Stopped from ' + escapeAttr(shortMonth(row.stopped_from)) + '</span></td>';
+    else tds += '<td class="prog"><div class="progcell"><div class="bar"><span style="width:' + pctDisplay + '%"></span></div><span class="pct">' + pctDisplay + '%</span></div></td>';
     SIGNOFF_COLS.forEach(function(c){ tds += '<td>' + signoffSelect(c, row[c.key], idx, locked) + '</td>'; });
-    tds += '<td class="rowactions">' + (locked?'':'<span class="del-row" data-idx="'+idx+'" title="Remove row">&#10005;</span>') + '</td>';
+    const toggle = pageLocked ? '' : (stopped
+      ? '<span class="eng-toggle" data-idx="' + idx + '" data-stop="0" title="Re-activate this company">&#8634;</span>'
+      : '<span class="eng-toggle" data-idx="' + idx + '" data-stop="1" title="Mark as stopped engaged from ' + escapeAttr(state.current) + '"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg></span>');
+    tds += '<td class="rowactions">' + toggle + (pageLocked?'':'<span class="del-row" data-idx="'+idx+'" title="Remove row">&#10005;</span>') + '</td>';
     tr.innerHTML = tds;
     tbody.appendChild(tr);
+    }
   });
 
   document.getElementById('statTotal').textContent = total;
@@ -1237,6 +1300,7 @@ function render(){
   const offset = circumference - (overall/100)*circumference;
   document.getElementById('ringProg').style.strokeDashoffset = offset;
 
+  updateStats();
   document.getElementById('btnAddRow').disabled = locked;
   if(typeof updateExportLabel === 'function') updateExportLabel();
   document.getElementById('btnAddRow2').style.display = locked ? 'none' : 'inline';
@@ -1252,8 +1316,11 @@ function render(){
 // Recompute the summary cards and ring from all rows (cheap: no table redraw).
 function updateStats(){
   const rows = currentRows();
-  let total=0, complete=0, zero=0, inprog=0, sumProg=0, pendingPCA=0, pendingBK=0, pendingTAX=0;
+  let total=0, complete=0, zero=0, inprog=0, sumProg=0, pendingPCA=0, pendingBK=0, pendingTAX=0, nIn=0, nOut=0;
   rows.forEach(function(row){
+    if(isNewThisMonth(row)) nIn++;
+    if(row.stopped_from && row.stopped_from === state.current) nOut++;
+    if(isStopped(row)) return;
     const prog = rowProgress(row);
     total++; sumProg += prog;
     if(prog >= 0.999) complete++; else if(prog <= 0.001) zero++; else inprog++;
@@ -1271,6 +1338,7 @@ function updateStats(){
   const overall = total ? Math.round((sumProg/total)*100) : 0;
   document.getElementById('overallPct').textContent = overall + '%';
   document.getElementById('ringProg').style.strokeDashoffset = 194.8 - (overall/100)*194.8;
+  document.getElementById('statInOut').innerHTML = '<span class="in">+' + nIn + '</span><span class="out">&minus;' + nOut + '</span>';
 }
 
 // After one status dropdown changes: restyle that dropdown, update its row's progress bar
@@ -1373,6 +1441,9 @@ function attachRowEvents(){
       saveState();
     });
   });
+  document.querySelectorAll('.eng-toggle').forEach(function(el){
+    el.addEventListener('click', function(){ setStopped(+el.dataset.idx, el.dataset.stop === '1'); });
+  });
   document.querySelectorAll('.del-row').forEach(function(el){
     el.addEventListener('click', function(){
       const idx = +el.dataset.idx;
@@ -1434,6 +1505,8 @@ document.getElementById('btnNewMonth').addEventListener('click', function(){
   const baseRows = state.months[state.order[state.order.length-1]].rows;
   const rows = baseRows.map(function(r){
     const nr = {name:r.name};
+    if(r.engaged_from) nr.engaged_from = r.engaged_from;
+    if(r.stopped_from) nr.stopped_from = r.stopped_from;
     COLS.forEach(function(c){ nr[c.key] = (DROPDOWN_COLS[c.key] && DROPDOWN_COLS[c.key].pending) ? 'na' : false; });
     return nr;
   });
@@ -1471,7 +1544,7 @@ function nextMonthGuess(label){
 
 function addRow(){
   if(isLocked()) return;
-  const emptyRow = {name: 'New Company'};
+  const emptyRow = {name: 'New Company', engaged_from: state.current};
   COLS.forEach(function(c){ emptyRow[c.key] = (DROPDOWN_COLS[c.key] && DROPDOWN_COLS[c.key].pending) ? 'na' : false; });
   currentRows().push(emptyRow);
   render();
@@ -1517,8 +1590,12 @@ document.getElementById('btnPrint').addEventListener('click', function(){ window
 function rowMatchesView(row){
   const search = document.getElementById('search').value.trim().toLowerCase();
   const filter = document.getElementById('statusFilter').value;
-  const prog = rowProgress(row);
+  const prog = rowProgress(row), stopped = isStopped(row);
   if(search && !String(row.name || '').toLowerCase().includes(search)) return false;
+  if(filter === 'active' && stopped) return false;
+  if(filter === 'new' && !isNewThisMonth(row)) return false;
+  if(filter === 'stopped' && !stopped) return false;
+  if((filter === 'complete' || filter === 'progress' || filter === 'zero') && stopped) return false;
   if(filter === 'complete' && prog < 0.999) return false;
   if(filter === 'progress' && (prog >= 0.999 || prog <= 0.001)) return false;
   if(filter === 'zero' && prog > 0.001) return false;
@@ -1547,10 +1624,10 @@ function exportSchedule(rows, opts){
   if(!rows.length){ alert('There are no companies to export.'); return; }
   const aoa = [];
   aoa.push([null,null,null,null,null,null,null,null,null,null,null,'Overall',
-    Math.round((rows.reduce(function(s,r){return s+rowProgress(r);},0)/(rows.length||1))*10000)/10000]);
+    (function(){ const act = rows.filter(function(r){ return !isStopped(r); }); return Math.round((act.reduce(function(s,r){return s+rowProgress(r);},0)/(act.length||1))*10000)/10000; })()]);
   aoa.push([]);
   aoa.push(['Company','PCA',null,null,'BK',null,null,null,null,null,null,null,null,'TAX',null,null,null,'Progess']);
-  aoa.push([null,'Import','Export','PCA %','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','BK %','E-filling','Separate Bill','Tax Payment','TAX %',null,'Plan Finish','Actual Finish Date','Review By','Confirmed By'].concat(opts.extra ? [opts.extra.label] : []));
+  aoa.push([null,'Import','Export','PCA %','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','BK %','E-filling','Separate Bill','Tax Payment','TAX %',null,'Plan Finish','Actual Finish Date','Review By','Confirmed By','Engagement'].concat(opts.extra ? [opts.extra.label] : []));
   rows.forEach(function(row, ri){
     const line = [row.name];
     TASK_COLS.forEach(function(c){
@@ -1564,7 +1641,7 @@ function exportSchedule(rows, opts){
       else if(c.key === 'tax_payment') line.push(Math.round(groupProgress(row, GROUPS.tax)*10000)/10000);
     });
     line.push(Math.round(rowProgress(row)*10000)/10000);
-    line.push(row.plan_finish || '', row.actual_finish || '', row.review_by || '', row.confirmed_by || '');
+    line.push(row.plan_finish || '', row.actual_finish || '', row.review_by || '', row.confirmed_by || '', engagementText(row));
     if(opts.extra) line.push(opts.extra.values[ri] || '');
     aoa.push(line);
   });
@@ -1574,14 +1651,14 @@ function exportSchedule(rows, opts){
     {s:{r:2,c:4},e:{r:2,c:12}},
     {s:{r:2,c:13},e:{r:2,c:16}}
   ];
-  ws['!cols'] = [{wch:52}].concat(new Array(16).fill({wch:11})).concat([{wch:10},{wch:13},{wch:16},{wch:14},{wch:14}]).concat(opts.extra ? [{wch:50}] : []);
+  ws['!cols'] = [{wch:52}].concat(new Array(16).fill({wch:11})).concat([{wch:10},{wch:13},{wch:16},{wch:14},{wch:14},{wch:34}]).concat(opts.extra ? [{wch:50}] : []);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, state.current.slice(0,31) || 'Schedule');
   const fname = ('ALCKH_' + state.current + (opts.suffix ? ' ' + opts.suffix : '')).replace(/[^a-z0-9 _-]/gi,'') + '.xlsx';
   XLSX.writeFile(wb, fname);
 }
 
-const FILTER_NAMES = {complete:'Complete', progress:'In progress', zero:'Not started'};
+const FILTER_NAMES = {complete:'Complete', progress:'In progress', zero:'Not started', active:'Active', 'new':'New engaged', stopped:'Stopped engaged'};
 document.getElementById('btnExport').addEventListener('click', function(){
   const rows = currentRows().filter(rowMatchesView);
   const parts = [];
@@ -1643,6 +1720,10 @@ document.getElementById('fileInput').addEventListener('change', function(e){
         row.actual_finish = line[col+2] ? String(line[col+2]).trim() : '';
         row.review_by = line[col+3] ? String(line[col+3]).trim() : '';
         row.confirmed_by = line[col+4] ? String(line[col+4]).trim() : '';
+        const eng = line[col+5] ? String(line[col+5]).trim() : '';
+        let em;
+        if((em = eng.match(/stopped engaged from\s+(.+)/i))) row.stopped_from = em[1].trim();
+        else if((em = eng.match(/new engaged(?:\s+in)?\s+(.+)/i))) row.engaged_from = em[1].trim();
         newRows.push(row);
       }
       if(newRows.length === 0){
@@ -1666,7 +1747,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
 
 
 // ---- Pending drill-down popup (double-click PCA / BK / TAX Pending cards) ----
-const PM_GROUP_NAMES = {pca:'PCA', bk:'BK', tax:'TAX'};
+const PM_GROUP_NAMES = {pca:'PCA', bk:'BK', tax:'TAX', inout:'Clients In / Out'};
 let pmCurrentGroup = null;
 let pmLastShown = [];
 function pmEsc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1675,12 +1756,45 @@ function pmItemDone(row, key){
   const v = row[key], dd = DROPDOWN_COLS[key];
   return v === true || (v === false && dd && dd.pending);
 }
+function pmRenderInOut(){
+  const q = document.getElementById('pmSearch').value.trim().toLowerCase();
+  const list = [];
+  currentRows().forEach(function(row, idx){
+    let kind = null;
+    if(row.stopped_from && row.stopped_from === state.current) kind = {cls:'out', label:'Stopped engaged', order:1};
+    else if(isNewThisMonth(row)) kind = {cls:'new', label:'New engaged', order:0};
+    else if(isStopped(row)) kind = {cls:'old', label:'Stopped earlier', order:2};
+    if(!kind) return;
+    list.push({idx:idx, name:row.name || '(no name)', kind:kind, month:(kind.cls === 'new' ? row.engaged_from : row.stopped_from), items:[engagementText(row)]});
+  });
+  list.sort(function(a, b){ return a.kind.order - b.kind.order || a.idx - b.idx; });
+  const nIn = list.filter(function(r){ return r.kind.cls === 'new'; }).length;
+  const nOut = list.filter(function(r){ return r.kind.cls === 'out'; }).length;
+  document.getElementById('pmTitle').textContent = 'Clients In / Out — ' + (state.current || '');
+  document.getElementById('pmCount').textContent = '+' + nIn + ' new · −' + nOut + ' stopped';
+  const shown = q ? list.filter(function(r){ return r.name.toLowerCase().includes(q); }) : list;
+  pmLastShown = shown;
+  document.getElementById('pmExport').disabled = !shown.length;
+  const body = document.getElementById('pmBody');
+  if(!shown.length){
+    body.innerHTML = '<div class="pm-empty">' + (list.length ? 'No client matches that filter.' : 'No clients engaged or stopped in this month.') + '</div>';
+    return;
+  }
+  let h = '<table><thead><tr><th>Company</th><th>Change</th><th>From month</th></tr></thead><tbody>';
+  shown.forEach(function(r){
+    h += '<tr class="pm-row" data-idx="' + r.idx + '"><td class="pm-name">' + pmEsc(r.name) + '</td>'
+       + '<td><span class="pm-kind ' + r.kind.cls + '">' + r.kind.label + '</span></td><td>' + pmEsc(r.month || '') + '</td></tr>';
+  });
+  body.innerHTML = h + '</tbody></table>';
+}
 function pmRender(){
   const g = pmCurrentGroup; if(!g) return;
+  if(g === 'inout') return pmRenderInOut();
   const keys = GROUPS[g];
   const q = document.getElementById('pmSearch').value.trim().toLowerCase();
   const list = [];
   currentRows().forEach(function(row, idx){
+    if(isStopped(row)) return; // stopped companies are not pending work
     const pct = groupProgress(row, keys);
     if(pct >= 0.999) return;
     const items = keys.filter(function(k){ return !pmItemDone(row, k); }).map(function(k){
@@ -1726,6 +1840,7 @@ function pmExportExcel(){
   const g = pmCurrentGroup; if(!g || !pmLastShown.length) return;
   const rows = currentRows();
   const list = pmLastShown.filter(function(r){ return rows[r.idx]; });
+  if(g === 'inout'){ exportSchedule(list.map(function(r){ return rows[r.idx]; }), {suffix:'Clients In-Out'}); return; }
   exportSchedule(list.map(function(r){ return rows[r.idx]; }), {
     suffix: PM_GROUP_NAMES[g] + ' Pending',
     extra: {label: PM_GROUP_NAMES[g] + ' pending items', values: list.map(function(r){ return r.items.join(', '); })}
