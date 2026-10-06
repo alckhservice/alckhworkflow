@@ -227,6 +227,12 @@
     min-width:230px;
   }
   .toolbar input[type=search]:focus{outline:none; border-color:var(--brass);}
+  .toolbar{gap:8px;}
+  .toolbar input[type=search]{min-width:170px; width:170px; padding:8px 14px;}
+  .toolbar select.statusfilter{max-width:150px; padding:8px 10px; font-size:12.5px; text-overflow:ellipsis;}
+  .toolbar select.signofffilter{max-width:140px;}
+  .toolbar select.signofffilter.on{border-color:var(--pine); background:var(--pine-soft); color:var(--pine); font-weight:600;}
+  .toolbar .btn{padding:8px 12px;}
   select.statusfilter{
     font-family:var(--sans);
     font-size:13px;
@@ -655,6 +661,8 @@
       <option value="stopped">Stopped engaged</option>
       <option value="lead">Leads (not confirmed)</option>
     </select>
+    <select class="statusfilter signofffilter" id="filterReview" title="Show only companies reviewed by this person"><option value="">Reviewer: all</option></select>
+    <select class="statusfilter signofffilter" id="filterConfirm" title="Show only companies confirmed by this person"><option value="">Confirmer: all</option></select>
     <select class="statusfilter" id="planFinishSort">
       <option value="">Sort by Plan Finish...</option>
       <option value="asc">Plan Finish: Oldest first</option>
@@ -829,6 +837,27 @@ function pushToCloud(){
   }, 600);
 }
 
+// One-time data fixes, run once against the cloud copy and remembered in state.fixes.
+// signoffCarry1: blank Review By / Confirmed By cells take the name from the previous month
+// (same company), so months created before names were carried forward get filled in.
+function runOneTimeFixes(){
+  if(!state || !state.order || (state.fixes && state.fixes.signoffCarry1)) return;
+  let filled = 0;
+  for(let i = 1; i < state.order.length; i++){
+    const prev = state.months[state.order[i-1]], cur = state.months[state.order[i]];
+    if(!prev || !cur || !prev.rows || !cur.rows) continue;
+    const byName = {};
+    prev.rows.forEach(function(r){ if(r && r.name) byName[String(r.name).trim().toLowerCase()] = r; });
+    cur.rows.forEach(function(r){
+      const p = r && byName[String(r.name || '').trim().toLowerCase()]; if(!p) return;
+      SIGNOFF_COLS.forEach(function(c){ if(!r[c.key] && p[c.key]){ r[c.key] = p[c.key]; filled++; } });
+    });
+  }
+  state.fixes = Object.assign({}, state.fixes, {signoffCarry1: true});
+  console.log('Sign-off names carried forward:', filled);
+  render(); // saves to the cloud
+}
+
 function startCloudSync(){
   docRef.onSnapshot((snap)=>{
     if(!snap.exists){
@@ -847,6 +876,7 @@ function startCloudSync(){
       applyRemote(remote);
     }
     initialSyncDone = true;
+    runOneTimeFixes();
   }, (err)=>{
     console.error('Firestore listen failed', err);
     initialSyncDone = true; // give up waiting for the cloud so this device can at least keep working (and saving) locally
@@ -1009,7 +1039,7 @@ function patchRemote(remote){
   const a = state.months[cur] && state.months[cur].rows, b = remote.months[cur] && remote.months[cur].rows;
   if(!a || !b || a.length !== b.length) return false;
   for(let i = 0; i < a.length; i++){ if(!a[i] || !b[i] || a[i].name !== b[i].name || (a[i].stopped_from||'') !== (b[i].stopped_from||'') || (a[i].engaged_from||'') !== (b[i].engaged_from||'') || (a[i].lead_from||'') !== (b[i].lead_from||'')) return false; }
-  if(document.getElementById('statusFilter').value !== 'all') return false; // rows may need to appear/disappear
+  if(anyFilterOn()) return false; // rows may need to appear/disappear
   state = remote;
   for(let i = 0; i < b.length; i++){
     if(J(a[i]) === J(b[i])) continue;
@@ -1146,6 +1176,18 @@ const SIGNOFF_COLS = [
   {key:'review_by', label:'Review By', options:['Ms. Sophea', 'Mrs. Maly', 'Ms. Channy', 'Ms. Navy', 'Ms. Sreynet', 'Ms. Davann', 'Mr. Seanghai']},
   {key:'confirmed_by', label:'Confirmed By', options:['Mr. Chhun', 'Mrs. Mouylaing', 'Ms Huychheng', 'Mr. Borey']}
 ];
+const SIGNOFF_FILTERS = {review_by:'filterReview', confirmed_by:'filterConfirm'};
+(function(){
+  SIGNOFF_COLS.forEach(function(c){
+    const sel = document.getElementById(SIGNOFF_FILTERS[c.key]); if(!sel) return;
+    let h = sel.innerHTML + '<option value="__blank__">' + c.label + ': (blank)</option>';
+    c.options.forEach(function(o){ h += '<option value="' + escapeAttr(o) + '">' + escapeAttr(o) + '</option>'; });
+    sel.innerHTML = h;
+  });
+})();
+function signoffFilterOn(){ return Object.keys(SIGNOFF_FILTERS).some(function(k){ return !!document.getElementById(SIGNOFF_FILTERS[k]).value; }); }
+function anyFilterOn(){ return document.getElementById('statusFilter').value !== 'all' || signoffFilterOn(); }
+
 function signoffSelect(c, v, idx, locked){
   v = v || '';
   return '<input type="text" class="textSel' + (v ? ' set' : '') + '" value="' + escapeAttr(v) + '" placeholder="-" autocomplete="off" spellcheck="false" title="' + escapeAttr(v || ('Type to search ' + c.label)) + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked ? 'disabled' : '') + '>';
@@ -1194,6 +1236,7 @@ function soCommit(el, val){
   const prev = row[field];
   row[field] = val;
   saveCell(idx, field, prev);
+  if(signoffFilterOn()) setTimeout(renderView, 0);
 }
 function soBind(el){
   el.dataset.saved = el.value;
@@ -1510,7 +1553,7 @@ function paintRowCells(idx, row){
 
 function refreshRow(el, idx, prev){
   const field = el.dataset.field;
-  if(document.getElementById('statusFilter').value !== 'all'){ renderView(); saveCell(idx, field, prev); return; }
+  if(anyFilterOn()){ renderView(); saveCell(idx, field, prev); return; }
   const row = currentRows()[idx];
   paintSelect(el, row[field], DROPDOWN_COLS[field]);
   paintRowProgress(el.closest('tr'), row);
@@ -1713,6 +1756,11 @@ function rowMatchesView(row){
   const filter = document.getElementById('statusFilter').value;
   const prog = rowProgress(row), stopped = isOut(row);
   if(search && !String(row.name || '').toLowerCase().includes(search)) return false;
+  for(const k in SIGNOFF_FILTERS){
+    const want = document.getElementById(SIGNOFF_FILTERS[k]).value;
+    if(want === '__blank__' && row[k]) return false;
+    if(want && want !== '__blank__' && row[k] !== want) return false;
+  }
   if(filter === 'active' && stopped) return false;
   if(filter === 'new' && !isNewThisMonth(row)) return false;
   if(filter === 'stopped' && !isStopped(row)) return false;
@@ -1724,7 +1772,7 @@ function rowMatchesView(row){
   return true;
 }
 function viewIsFiltered(){
-  return document.getElementById('statusFilter').value !== 'all' || !!document.getElementById('search').value.trim();
+  return anyFilterOn() || !!document.getElementById('search').value.trim();
 }
 function updateExportLabel(){
   const btn = document.getElementById('btnExport'); if(!btn) return;
@@ -1786,11 +1834,15 @@ document.getElementById('btnExport').addEventListener('click', function(){
   const parts = [];
   const f = document.getElementById('statusFilter').value;
   if(FILTER_NAMES[f]) parts.push(FILTER_NAMES[f]);
+  const rv = document.getElementById('filterReview').value, cf = document.getElementById('filterConfirm').value;
+  if(rv) parts.push('Review ' + (rv === '__blank__' ? 'blank' : rv));
+  if(cf) parts.push('Confirmed ' + (cf === '__blank__' ? 'blank' : cf));
   if(document.getElementById('search').value.trim()) parts.push('search');
   exportSchedule(rows, {suffix: parts.join(' ')});
 });
 document.getElementById('search').addEventListener('input', updateExportLabel);
 document.getElementById('statusFilter').addEventListener('change', updateExportLabel);
+['filterReview','filterConfirm'].forEach(function(id){ const el = document.getElementById(id); el.addEventListener('change', function(){ el.classList.toggle('on', !!el.value); renderView(); }); });
 
 document.getElementById('btnClearAll').addEventListener('click', function(){
   if(isLocked()) return;
