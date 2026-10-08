@@ -1125,7 +1125,9 @@ function onCloudData(){
   const merged = cloudBase ? mergeShared(cloudBase, sharedCopy(state), remote) : remote;
   cloudBase = remote;
   saveBase(remote);
-  applyRemote(merged);
+  // A separate copy: the data on screen must never be the same object as the cloud copy,
+  // otherwise an edit changes both and is never sent.
+  applyRemote(JSON.parse(JSON.stringify(merged)));
   initialSyncDone = true;
   runOneTimeFixes();
   schedulePush();
