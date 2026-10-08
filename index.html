@@ -577,6 +577,9 @@
   .lg-card button{margin-top:12px;width:100%;padding:12px;font-size:15px;font-weight:600;border:0;
     border-radius:var(--r-pill);background:var(--ink);color:#fff;cursor:pointer;font-family:var(--sans);}
   .lg-card button:disabled{opacity:.6;cursor:wait;}
+  .lg-card button.lg-google{margin:0;background:#fff;color:var(--ink);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px;}
+  .lg-card button.lg-google:hover{background:var(--paper);}
+  .lg-or{margin:16px 0 10px;font-family:var(--sans);font-size:12px;color:var(--ink-soft);}
   .lg-err{min-height:18px;margin-top:10px;font-size:13px;color:var(--rust);font-family:var(--sans);}
   #logoutBtn{margin-left:10px;background:none;border:1px solid var(--line);border-radius:var(--r-pill);
     padding:2px 10px;font:inherit;cursor:pointer;color:var(--ink-soft);}
@@ -587,7 +590,9 @@
   <form class="lg-card" id="loginForm" autocomplete="on">
     <div class="kicker">ALCKH SERVICES SOLUTION</div>
     <h2>Team Login</h2>
-    <p>Enter the team password to open the report.</p>
+    <p>Sign in with your Google account to open the report.</p>
+    <button type="button" id="googleBtn" class="lg-google"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Sign in with Google</button>
+    <div class="lg-or">or use the team password</div>
     <input type="text" name="username" value="ALCKH team" autocomplete="username" hidden>
     <input type="password" id="loginPw" placeholder="Team password" autocomplete="current-password" required>
     <button type="submit" id="loginBtn">Sign in</button>
@@ -623,6 +628,7 @@
     <div class="spacer"></div>
     <button class="pill-btn ghost" id="btnWho" title="Your name is saved with every change you make">You: …</button>
     <button class="pill-btn ghost" id="btnHistory" title="See who changed what">History</button>
+    <button class="pill-btn ghost" id="btnStaff" title="Who can sign in with Google" style="display:none">Staff</button>
     <button class="pill-btn ghost" id="btnRenameMonth">Rename</button>
     <button class="pill-btn ghost" id="btnNewMonth">+ New month</button>
     <button class="pill-btn danger" id="btnDeleteMonth">Delete month</button>
@@ -768,6 +774,23 @@
         <button class="pmodal-close" id="histClose" type="button" title="Close">&times;</button></div>
       <input type="search" class="pmodal-search" id="histSearch" placeholder="Filter by company, person or column…">
       <div class="pmodal-body" id="histBody"></div>
+    </div>
+  </div>
+
+  <div class="pmodal-back" id="staffBack">
+    <div class="pmodal" role="dialog" aria-modal="true" style="width:min(680px,96vw)">
+      <div class="pmodal-head"><h3>Staff who can sign in with Google</h3><span class="cnt" id="staffCount">0</span>
+        <button class="pmodal-close" id="staffClose" type="button" title="Close">&times;</button></div>
+      <div class="pmodal-body">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 4px">
+          <input id="staffEmail" class="pmodal-search" style="margin:0;flex:2;min-width:200px" type="email" placeholder="Google email, e.g. sophea@gmail.com" autocomplete="off">
+          <input id="staffName" class="pmodal-search" style="margin:0;flex:1;min-width:140px" placeholder="Name shown, e.g. Ms. Sophea" autocomplete="off">
+          <label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="staffAdmin"> Admin</label>
+          <button class="pmodal-export" id="staffAdd" type="button">Add</button>
+        </div>
+        <div class="lg-err" id="staffErr" style="text-align:left"></div>
+        <div id="staffList"></div>
+      </div>
     </div>
   </div>
 
@@ -1241,7 +1264,7 @@ function onCloudData(){
     flushLocal();                        // sends exactly those own edits
     runOneTimeFixes();
     showSaveState();
-    if(!currentUser()) openWho();
+    if(!staffName && !currentUser()) openWho();
     return;
   }
   flushLocal();                          // never drop an edit that has not been sent
@@ -1325,11 +1348,13 @@ const WHO_KEY = IS_TEST_SITE ? 'alckh_wfr_test_user' : 'alckh_wfr_user';
 const logCol = db.collection(COLL_PREFIX + 'log');
 const editInfo = {};  // month -> company -> field -> {by, at}
 const myRecent = {};  // cellKey -> when this computer last changed that cell
+let staffName = '';      // the signed-in person's name from the staff list ('' = team password)
+let isAdminUser = false; // may manage the staff list
 const FIELD_NAMES = {name: 'Company name', stopped_from: 'Stopped from', engaged_from: 'Engaged from',
                      lead_from: 'Lead since', '(added)': 'Company added', '(removed)': 'Company removed',
                      months: 'Month list', locked: 'Past month editing'};
 function currentUser(){ try{ return localStorage.getItem(WHO_KEY) || ''; }catch(e){ return ''; } }
-function whoLabel(){ return currentUser() || 'Unknown'; }
+function whoLabel(){ return staffName || currentUser() || 'Unknown'; }
 function serverTime(){ return firebase.firestore.FieldValue.serverTimestamp(); }
 function fieldLabel(f){
   const c = COLS.find(function(x){ return x.key === f; }) || SIGNOFF_COLS.find(function(x){ return x.key === f; });
@@ -1402,6 +1427,10 @@ function markEditedBy(el, row){
 
 // ---- Name on this computer ----
 function openWho(){
+  if(staffName){
+    showNotice('You are signed in with Google as <b>' + pmEsc(staffName) + '</b>. An admin can change this name in the Staff list.');
+    return;
+  }
   const list = document.getElementById('whoList');
   const names = new Set();
   SIGNOFF_COLS.forEach(function(c){ c.options.forEach(function(o){ names.add(o); }); });
@@ -1420,7 +1449,12 @@ function saveWho(){
 }
 function showWho(){
   const b = document.getElementById('btnWho');
-  if(b) b.textContent = 'You: ' + (currentUser() || 'choose name');
+  if(b){
+    b.textContent = 'You: ' + (staffName || currentUser() || 'choose name');
+    b.title = staffName ? 'Signed in with Google' : 'Your name is saved with every change you make';
+  }
+  const s = document.getElementById('btnStaff');
+  if(s) s.style.display = isAdminUser ? '' : 'none';
 }
 document.getElementById('btnWho').addEventListener('click', openWho);
 document.getElementById('whoSave').addEventListener('click', saveWho);
@@ -1468,6 +1502,64 @@ document.getElementById('histBack').addEventListener('click', function(e){ if(e.
 document.getElementById('histSearch').addEventListener('input', renderHistory);
 document.getElementById('histThisMonth').addEventListener('change', renderHistory);
 document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeHistory(); });
+
+// ---- Staff list (who may sign in with Google) ----
+// Each staff member signs in with their own Google account. Only emails on this list get in.
+// Admins (the team password account, or staff marked Admin) can add and remove people.
+const staffCol = db.collection(COLL_PREFIX + 'staff');
+function openStaff(){
+  document.getElementById('staffErr').textContent = '';
+  document.getElementById('staffBack').classList.add('show');
+  loadStaff();
+}
+function loadStaff(){
+  document.getElementById('staffList').innerHTML = '<div class="pm-empty">Loading…</div>';
+  staffCol.get().then(function(snap){
+    const rows = snap.docs.map(function(d){ return Object.assign({email: d.id}, d.data()); })
+      .sort(function(a, b){ return String(a.name || a.email).localeCompare(String(b.name || b.email)); });
+    document.getElementById('staffCount').textContent = rows.length;
+    if(!rows.length){ document.getElementById('staffList').innerHTML = '<div class="pm-empty">Nobody added yet.</div>'; return; }
+    let h = '<table><thead><tr><th>Name</th><th>Google email</th><th>Admin</th><th></th></tr></thead><tbody>';
+    rows.forEach(function(r){
+      h += '<tr><td>' + pmEsc(r.name || '') + '</td><td>' + pmEsc(r.email) + '</td><td>' + (r.admin ? 'Yes' : '') +
+           '</td><td style="text-align:right"><button type="button" class="pill-btn ghost staff-del" data-email="' +
+           escapeAttr(r.email) + '">Remove</button></td></tr>';
+    });
+    document.getElementById('staffList').innerHTML = h + '</tbody></table>';
+    document.querySelectorAll('#staffList .staff-del').forEach(function(b){
+      b.addEventListener('click', function(){
+        const email = b.dataset.email;
+        if(!confirm('Remove ' + email + '? They will no longer be able to sign in.')) return;
+        staffCol.doc(email).delete().then(loadStaff).catch(function(err){
+          document.getElementById('staffErr').textContent = 'Could not remove: ' + (err.code || err.message);
+        });
+      });
+    });
+  }).catch(function(err){
+    document.getElementById('staffList').innerHTML = '<div class="pm-empty">Could not load the staff list (' + pmEsc(err.code || '') + ').</div>';
+  });
+}
+function addStaff(){
+  const email = document.getElementById('staffEmail').value.trim().toLowerCase();
+  const name = document.getElementById('staffName').value.trim();
+  const admin = document.getElementById('staffAdmin').checked;
+  const err = document.getElementById('staffErr');
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ err.textContent = 'Enter a valid Google email address.'; return; }
+  if(!name){ err.textContent = 'Enter the name to show for this person.'; return; }
+  err.textContent = '';
+  staffCol.doc(email).set({name: name, admin: admin, addedBy: whoLabel(), addedAt: serverTime()}).then(function(){
+    document.getElementById('staffEmail').value = '';
+    document.getElementById('staffName').value = '';
+    document.getElementById('staffAdmin').checked = false;
+    loadStaff();
+  }).catch(function(e){ err.textContent = 'Could not add: ' + (e.code || e.message); });
+}
+function closeStaff(){ document.getElementById('staffBack').classList.remove('show'); }
+document.getElementById('btnStaff').addEventListener('click', openStaff);
+document.getElementById('staffAdd').addEventListener('click', addStaff);
+document.getElementById('staffClose').addEventListener('click', closeStaff);
+document.getElementById('staffBack').addEventListener('click', function(e){ if(e.target.id === 'staffBack') closeStaff(); });
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeStaff(); });
 
 // ---- Saving on this computer ----
 // The month this computer is looking at stays on this computer and is never shared.
@@ -2599,19 +2691,60 @@ document.getElementById('pmBody').addEventListener('click', function(e){
 const _pmOrigRender = render;
 render = function(){ _pmOrigRender.apply(this, arguments); if(pmCurrentGroup) pmRender(); markCells(); };
 
-// ---- Team login gate (shared team password via Firebase Auth) ----
+// ---- Login: each person's Google account, or the shared team password (kept for now) ----
 const TEAM_EMAIL = 'team@alckh-control-a868c.firebaseapp.com';
 let cloudStarted = false;
+function openApp(){
+  document.body.classList.remove('locked');
+  showWho();
+  render();
+  if(!cloudStarted){ cloudStarted = true; startCloudSync(); }
+}
+function loginError(text){
+  document.getElementById('loginErr').textContent = text;
+  const g = document.getElementById('googleBtn'); if(g){ g.disabled = false; }
+}
 firebase.auth().onAuthStateChanged((user)=>{
   if(user){
-    document.body.classList.remove('locked');
-    render();
-    if(!cloudStarted){ cloudStarted = true; startCloudSync(); }
+    if(user.email === TEAM_EMAIL){ staffName = ''; isAdminUser = true; openApp(); return; }
+    const email = String(user.email || '').toLowerCase();
+    staffCol.doc(email).get().then(function(snap){
+      if(!snap.exists){
+        loginError('This Google account (' + email + ') is not on the staff list. Ask your admin to add it.');
+        firebase.auth().signOut();
+        return;
+      }
+      const d = snap.data();
+      staffName = d.name || user.displayName || email;
+      isAdminUser = !!d.admin;
+      openApp();
+    }).catch(function(err){
+      console.error('Staff check failed', err);
+      loginError(err && err.code === 'permission-denied'
+        ? 'This Google account (' + email + ') is not on the staff list. Ask your admin to add it.'
+        : 'Could not check the staff list — check the internet connection and try again.');
+      firebase.auth().signOut();
+    });
   }else{
     document.body.classList.add('locked');
-    setTimeout(()=>{ const pw=document.getElementById('loginPw'); if(pw) pw.focus(); }, 50);
     if(cloudStarted){ location.reload(); }
   }
+});
+document.getElementById('googleBtn').addEventListener('click', ()=>{
+  const g = document.getElementById('googleBtn');
+  document.getElementById('loginErr').textContent = '';
+  g.disabled = true;
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({prompt: 'select_account'});
+  firebase.auth().signInWithPopup(provider).catch((ex)=>{
+    const c = ex && ex.code || '';
+    if(c === 'auth/popup-blocked'){ firebase.auth().signInWithRedirect(provider); return; }
+    loginError(c === 'auth/operation-not-allowed' ? 'Google sign-in is not switched on yet — use the team password for now.'
+      : c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request' ? ''
+      : c === 'auth/unauthorized-domain' ? 'This web address is not allowed for Google sign-in yet (Firebase authorized domains).'
+      : c.includes('network') ? 'No internet connection — please try again.'
+      : 'Google sign-in failed (' + c + ').');
+  });
 });
 document.getElementById('loginForm').addEventListener('submit', (e)=>{
   e.preventDefault();

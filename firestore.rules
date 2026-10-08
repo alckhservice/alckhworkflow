@@ -15,27 +15,50 @@ service cloud.firestore {
         && request.auth.token.email == 'team@alckh-control-a868c.firebaseapp.com';
     }
 
+    // Staff who sign in with their own Google account: their email must be on the staff list
+    // (<prefix>staff/<email>). Admins on that list may manage it.
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    function onStaffList(coll) {
+      return request.auth != null && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/$(coll)/$(myEmail()));
+    }
+    function staffAdmin(coll) {
+      return onStaffList(coll)
+        && get(/databases/$(database)/documents/$(coll)/$(myEmail())).data.get('admin', false) == true;
+    }
+
     // Working Flow Report — current layout: one record per company per month, plus one settings record.
     match /wfr2_rows/{docId} {
-      allow read, write: if isTeam();
+      allow read, write: if isTeam() || onStaffList('wfr2_staff');
     }
     match /wfr2_meta/{docId} {
-      allow read, write: if isTeam();
+      allow read, write: if isTeam() || onStaffList('wfr2_staff');
     }
     // Change history: lines can be added and read, never changed or removed.
     match /wfr2_log/{docId} {
-      allow read, create: if isTeam();
+      allow read, create: if isTeam() || onStaffList('wfr2_staff');
+    }
+    // Staff list: a person may read their own entry; admins manage the list.
+    match /wfr2_staff/{email} {
+      allow get: if isTeam() || (request.auth != null && myEmail() == email) || staffAdmin('wfr2_staff');
+      allow list, write: if isTeam() || staffAdmin('wfr2_staff');
     }
 
     // Working Flow Report — test-site copy (kept so the test copy keeps working; can be removed later).
     match /wfr_rows/{docId} {
-      allow read, write: if isTeam();
+      allow read, write: if isTeam() || onStaffList('wfr_staff');
     }
     match /wfr_meta/{docId} {
-      allow read, write: if isTeam();
+      allow read, write: if isTeam() || onStaffList('wfr_staff');
     }
     match /wfr_log/{docId} {
-      allow read, create: if isTeam();
+      allow read, create: if isTeam() || onStaffList('wfr_staff');
+    }
+    match /wfr_staff/{email} {
+      allow get: if isTeam() || (request.auth != null && myEmail() == email) || staffAdmin('wfr_staff');
+      allow list, write: if isTeam() || staffAdmin('wfr_staff');
     }
 
     // Working Flow Report — old single-document layout, kept so the one-time copy can read it.
