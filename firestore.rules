@@ -22,6 +22,10 @@ service cloud.firestore {
     match /wfr2_meta/{docId} {
       allow read, write: if isTeam();
     }
+    // Change history: lines can be added and read, never changed or removed.
+    match /wfr2_log/{docId} {
+      allow read, create: if isTeam();
+    }
 
     // Working Flow Report — test-site copy (kept so the test copy keeps working; can be removed later).
     match /wfr_rows/{docId} {
@@ -29,6 +33,9 @@ service cloud.firestore {
     }
     match /wfr_meta/{docId} {
       allow read, write: if isTeam();
+    }
+    match /wfr_log/{docId} {
+      allow read, create: if isTeam();
     }
 
     // Working Flow Report — old single-document layout, kept so the one-time copy can read it.

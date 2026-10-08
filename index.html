@@ -621,6 +621,8 @@
     <button class="navbtn" id="btnNextMonth" title="Next month">›</button>
     <span class="snapshot-tag" id="snapshotTag">Latest</span>
     <div class="spacer"></div>
+    <button class="pill-btn ghost" id="btnWho" title="Your name is saved with every change you make">You: …</button>
+    <button class="pill-btn ghost" id="btnHistory" title="See who changed what">History</button>
     <button class="pill-btn ghost" id="btnRenameMonth">Rename</button>
     <button class="pill-btn ghost" id="btnNewMonth">+ New month</button>
     <button class="pill-btn danger" id="btnDeleteMonth">Delete month</button>
@@ -745,6 +747,27 @@
         <tr><td colspan="20"><button class="addrow-btn" id="btnAddRow2">+ add another company row</button></td></tr>
       </tfoot>
     </table>
+    </div>
+  </div>
+
+  <div class="pmodal-back" id="whoBack">
+    <div class="pmodal" role="dialog" aria-modal="true" style="width:min(440px,96vw)">
+      <div class="pmodal-head"><h3>Who is using this computer?</h3></div>
+      <div class="pmodal-body">
+        <p style="margin:6px 0 10px;color:var(--ink-soft);font-size:13px">Your name is saved with each change you make, so the team can see who changed what. It is remembered on this computer.</p>
+        <input id="whoInput" list="whoList" class="pmodal-search" style="margin:0;width:100%;box-sizing:border-box" placeholder="Your name, e.g. Ms. Sophea" autocomplete="off">
+        <datalist id="whoList"></datalist>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="pmodal-export" id="whoSave" type="button">Save</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="pmodal-back" id="histBack">
+    <div class="pmodal" role="dialog" aria-modal="true">
+      <div class="pmodal-head"><h3 id="histTitle">History</h3><span class="cnt" id="histCount">0</span>
+        <label style="font-size:13px;display:flex;gap:6px;align-items:center;white-space:nowrap"><input type="checkbox" id="histThisMonth" checked> This month only</label>
+        <button class="pmodal-close" id="histClose" type="button" title="Close">&times;</button></div>
+      <input type="search" class="pmodal-search" id="histSearch" placeholder="Filter by company, person or column…">
+      <div class="pmodal-body" id="histBody"></div>
     </div>
   </div>
 
@@ -996,14 +1019,15 @@ function diffShared(base, local){
         ops.push({kind: 'set', id: id, key: key, month: m, name: nameOfKey(key), data: Object.assign({month: m, pos: pos}, row)});
         return;
       }
-      const baseRow = plain(b.row), fields = {};
+      const baseRow = plain(b.row), fields = {}, prev = {};
       Object.keys(Object.assign({}, row, baseRow)).forEach(function(f){
         if(canon(row[f]) === canon(baseRow[f])) return;
         fields[f] = (row[f] === undefined) ? deleteField() : row[f];
+        prev[f] = baseRow[f];
       });
       if(b.pos !== pos) fields.pos = pos;
       if(Object.keys(fields).length){
-        ops.push({kind: 'update', id: id, key: key, month: m, name: nameOfKey(key), fields: fields,
+        ops.push({kind: 'update', id: id, key: key, month: m, name: nameOfKey(key), fields: fields, prev: prev,
                   full: Object.assign({month: m, pos: pos}, row)});
       }
     });
@@ -1024,7 +1048,7 @@ function diffShared(base, local){
       });
       if(Object.keys(p).length) patch[k] = p;
     });
-    ops.push({kind: 'meta', data: patch});
+    ops.push({kind: 'meta', data: patch, was: metaWas, now: metaNow});
   }
   return ops;
 }
@@ -1037,6 +1061,7 @@ function sharedFromCloud(meta, docs){
     const row = Object.assign({}, d);
     const pos = row.pos || 0;
     delete row.month; delete row.pos;
+    if(row._edits){ (editInfo[d.month] = editInfo[d.month] || {})[row.name] = row._edits; delete row._edits; }
     (byMonth[d.month] = byMonth[d.month] || []).push([pos, row]);
   });
   const months = {};
@@ -1052,20 +1077,53 @@ function sharedFromCloud(meta, docs){
 // survives a reload) and sent to the cloud as soon as there is a connection.
 function writeOps(ops){
   if(!ops.length) return Promise.resolve();
-  const sorted = ops.slice().sort(function(a, b){ return (a.kind === 'meta') - (b.kind === 'meta'); });
+  const by = whoLabel(), at = serverTime(), items = [];  // items: {write(batch), cells}
+  const log = function(month, name, field, from, to){
+    items.push({cells: [], write: function(b){ b.set(logCol.doc(), {month: month, name: name, field: field,
+      from: logValue(from), to: logValue(to), by: by, at: at}); }});
+  };
+  const sets = ops.filter(function(o){ return o.kind === 'set'; }), dels = ops.filter(function(o){ return o.kind === 'delete'; });
+  const bulk = function(list, field){ // a new month adds many companies at once: one history line per month
+    const per = {};
+    list.forEach(function(o){ per[o.month] = (per[o.month] || 0) + 1; });
+    Object.keys(per).forEach(function(m){ if(per[m] > 5) log(m, per[m] + ' companies', field, null, null); });
+    return per;
+  };
+  const setPer = bulk(sets, '(added)'), delPer = bulk(dels, '(removed)');
+  ops.slice().sort(function(a, b){ return (a.kind === 'meta') - (b.kind === 'meta'); }).forEach(function(o){
+    if(o.kind === 'meta'){
+      items.push({cells: [], write: function(b){ b.set(metaRef, o.data, {merge: true}); }});
+      if(o.data.order) log('', '', 'months', (o.was.order || []).join(', '), (o.now.order || []).join(', '));
+      if(o.data.locked) Object.keys(o.data.locked).forEach(function(m){
+        log(m, '', 'locked', o.was.locked[m] ? 'Allowed' : 'Locked', o.now.locked[m] ? 'Allowed' : 'Locked');
+      });
+    } else if(o.kind === 'set'){
+      items.push({cells: [cellKey(o.month, o.name, 'name')], write: function(b){
+        b.set(rowsCol.doc(o.id), Object.assign({}, o.data, {_edits: {_added: {by: by, at: at}}}));
+      }});
+      if(setPer[o.month] <= 5) log(o.month, o.name, '(added)', null, null);
+    } else if(o.kind === 'delete'){
+      items.push({cells: [], write: function(b){ b.delete(rowsCol.doc(o.id)); }});
+      if(delPer[o.month] <= 5) log(o.month, nameOfKey(o.key), '(removed)', null, null);
+    } else if(o.kind === 'update'){
+      const edits = {}, cells = [];
+      Object.keys(o.fields).forEach(function(f){
+        if(f === 'pos') return;
+        edits[f] = {by: by, at: at};
+        cells.push(cellKey(o.month, o.name, f));
+        myRecent[cellKey(o.month, o.name, f)] = Date.now();
+      });
+      // merge: only these fields change; the rest of the company's record is left alone
+      const data = Object.assign({month: o.month, name: o.name, pos: o.full.pos}, o.fields);
+      if(cells.length) data._edits = edits;
+      items.push({cells: cells, write: function(b){ b.set(rowsCol.doc(o.id), data, {merge: true}); }});
+      cells.forEach(function(k, n){ const f = k.split('\u0001')[2]; log(o.month, o.name, f, o.prev[f], o.full[f]); });
+    }
+  });
   const commits = [];
-  for(let i = 0; i < sorted.length; i += 400){
+  for(let i = 0; i < items.length; i += 450){
     const batch = db.batch(), cells = [];
-    sorted.slice(i, i + 400).forEach(function(o){
-      if(o.kind === 'meta') batch.set(metaRef, o.data, {merge: true});
-      else if(o.kind === 'set'){ batch.set(rowsCol.doc(o.id), o.data); cells.push(cellKey(o.month, o.name, 'name')); }
-      else if(o.kind === 'delete') batch.delete(rowsCol.doc(o.id));
-      else if(o.kind === 'update'){
-        // merge: only these fields change; the rest of the company's record is left alone
-        batch.set(rowsCol.doc(o.id), Object.assign({month: o.month, name: o.name, pos: o.full.pos}, o.fields), {merge: true});
-        Object.keys(o.fields).forEach(function(f){ if(f !== 'pos') cells.push(cellKey(o.month, o.name, f)); });
-      }
-    });
+    items.slice(i, i + 450).forEach(function(it){ it.write(batch); cells.push.apply(cells, it.cells); });
     pendingWrites++;
     cells.forEach(function(k){ savingCells[k] = (savingCells[k] || 0) + 1; delete failedCells[k]; });
     commits.push(batch.commit().then(function(){
@@ -1117,6 +1175,7 @@ function markCells(){
     const k = cellKey(state.current, row.name, el.dataset.field);
     el.classList.toggle('cell-saving', !!savingCells[k]);
     el.classList.toggle('cell-failed', !!failedCells[k] && !savingCells[k]);
+    markEditedBy(el, row);
   });
 }
 
@@ -1182,9 +1241,11 @@ function onCloudData(){
     flushLocal();                        // sends exactly those own edits
     runOneTimeFixes();
     showSaveState();
+    if(!currentUser()) openWho();
     return;
   }
   flushLocal();                          // never drop an edit that has not been sent
+  noticeTeammateChanges(synced, remote);
   synced = remote;
   applyRemote(remote);
   showSaveState();
@@ -1232,7 +1293,7 @@ function loadAllRows(){
   rowsCol.get().then(function(snap){
     if(snap.empty && snap.metadata.fromCache){ setTimeout(loadAllRows, 5000); return; } // offline, nothing cached yet
     const all = {};
-    snap.docs.forEach(function(d){ const r = d.data(); (all[r.month] = all[r.month] || []).push(r); });
+    snap.docs.forEach(function(d){ const r = d.data({serverTimestamps: 'estimate'}); (all[r.month] = all[r.month] || []).push(r); });
     Object.keys(all).forEach(function(m){ if(!watchReady[m]) cloudByMonth[m] = all[m]; });
     rowsSeen = true;
     onCloudData();
@@ -1247,7 +1308,7 @@ function watchMonth(m){
   if(!cloudOn || !m || rowWatch[m]) return;
   Object.keys(rowWatch).forEach(function(k){ rowWatch[k](); delete rowWatch[k]; delete watchReady[k]; });
   rowWatch[m] = rowsCol.where('month', '==', m).onSnapshot(function(snap){
-    cloudByMonth[m] = snap.docs.map(function(d){ return d.data(); });
+    cloudByMonth[m] = snap.docs.map(function(d){ return d.data({serverTimestamps: 'estimate'}); });
     watchReady[m] = true;
     onCloudData();
   }, onCloudError);
@@ -1256,6 +1317,157 @@ function onCloudError(err){
   console.error('Firestore failed', err);
   setSyncStatus(err && err.code === 'permission-denied' ? 'Not allowed — please sign in again' : 'Offline — changes are kept and will be sent automatically');
 }
+
+// ---- Who changed what ----
+// Each computer picks its user's name once. Every change saves the name and time on the changed
+// cell (shown when hovering the cell) and adds a line to the change history (History button).
+const WHO_KEY = IS_TEST_SITE ? 'alckh_wfr_test_user' : 'alckh_wfr_user';
+const logCol = db.collection(COLL_PREFIX + 'log');
+const editInfo = {};  // month -> company -> field -> {by, at}
+const myRecent = {};  // cellKey -> when this computer last changed that cell
+const FIELD_NAMES = {name: 'Company name', stopped_from: 'Stopped from', engaged_from: 'Engaged from',
+                     lead_from: 'Lead since', '(added)': 'Company added', '(removed)': 'Company removed',
+                     months: 'Month list', locked: 'Past month editing'};
+function currentUser(){ try{ return localStorage.getItem(WHO_KEY) || ''; }catch(e){ return ''; } }
+function whoLabel(){ return currentUser() || 'Unknown'; }
+function serverTime(){ return firebase.firestore.FieldValue.serverTimestamp(); }
+function fieldLabel(f){
+  const c = COLS.find(function(x){ return x.key === f; }) || SIGNOFF_COLS.find(function(x){ return x.key === f; });
+  return c ? c.label : (FIELD_NAMES[f] || f);
+}
+function fmtVal(f, v){
+  if(v === undefined || v === null || v === '') return '—';
+  const d = DROPDOWN_COLS[f];
+  if(d) return v === true ? d.yes : (v === 'na' ? 'N/A' : d.no);
+  if(typeof v === 'boolean') return v ? 'Done' : '—';
+  return String(v);
+}
+function toDate(t){ return t && typeof t.toDate === 'function' ? t.toDate() : (t ? new Date(t) : null); }
+function fmtTime(t){
+  const d = toDate(t);
+  return d ? d.toLocaleString([], {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : '';
+}
+function logValue(v){ return (v === undefined) ? null : plain(v); }
+
+// Short message in the corner (e.g. a teammate changed a cell you had just changed).
+function showNotice(html){
+  let el = document.getElementById('wfrNotice');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'wfrNotice';
+    el.style.cssText = 'position:fixed;right:16px;bottom:16px;max-width:400px;background:var(--paper-raised);' +
+      'border:1px solid var(--amber);border-left:5px solid var(--amber);border-radius:var(--r-md);' +
+      'box-shadow:0 10px 30px rgba(0,0,0,.18);padding:12px 14px;font-size:13px;line-height:1.45;z-index:10000;';
+    el.addEventListener('click', function(){ el.style.display = 'none'; });
+    document.body.appendChild(el);
+  }
+  el.innerHTML = html + '<div style="margin-top:6px;color:var(--ink-soft);font-size:11px">Click to close</div>';
+  el.style.display = 'block';
+  clearTimeout(showNotice.timer);
+  showNotice.timer = setTimeout(function(){ el.style.display = 'none'; }, 20000);
+}
+
+// Before showing new cloud data: tell the user if a teammate changed a cell they changed recently.
+function noticeTeammateChanges(oldShared, remote){
+  const m = state.current;
+  const oldRows = oldShared && oldShared.months[m] && oldShared.months[m].rows;
+  const newRows = remote.months[m] && remote.months[m].rows;
+  if(!oldRows || !newRows) return;
+  const before = new Map(keyRows(oldRows)), me = whoLabel(), hits = [];
+  keyRows(newRows).forEach(function(it){
+    const was = before.get(it[0]); if(!was) return;
+    const row = it[1], info = editInfo[m] && editInfo[m][row.name];
+    Object.keys(Object.assign({}, was, row)).forEach(function(f){
+      if(canon(was[f]) === canon(row[f])) return;
+      const e = info && info[f], mine = myRecent[cellKey(m, row.name, f)];
+      if(!e || e.by === me || !mine || Date.now() - mine > 30 * 60000) return;
+      hits.push('<b>' + pmEsc(e.by) + '</b> changed <b>' + pmEsc(fieldLabel(f)) + '</b> for ' + pmEsc(row.name) +
+                ' after you — now <b>' + pmEsc(fmtVal(f, row[f])) + '</b>');
+    });
+  });
+  if(hits.length) showNotice(hits.slice(0, 4).join('<br>') + (hits.length > 4 ? '<br>… and ' + (hits.length - 4) + ' more' : ''));
+}
+
+// Hover text on each cell: who changed it last, and when.
+function markEditedBy(el, row){
+  const info = editInfo[state.current] && editInfo[state.current][row.name];
+  const f = el.dataset.field;
+  const e = info && (info[f] || (f === 'name' ? info._added : null));
+  const note = e ? 'Last changed by ' + e.by + (e.at ? ', ' + fmtTime(e.at) : '') : '';
+  const td = el.closest('td');
+  if(td) td.title = note;
+  if(el.classList.contains('textSel')) el.title = (row[f] || '') + (note ? '\n' + note : '');
+  else el.title = note;
+}
+
+// ---- Name on this computer ----
+function openWho(){
+  const list = document.getElementById('whoList');
+  const names = new Set();
+  SIGNOFF_COLS.forEach(function(c){ c.options.forEach(function(o){ names.add(o); }); });
+  list.innerHTML = Array.from(names).map(function(n){ return '<option value="' + escapeAttr(n) + '">'; }).join('');
+  const inp = document.getElementById('whoInput');
+  inp.value = currentUser();
+  document.getElementById('whoBack').classList.add('show');
+  setTimeout(function(){ inp.focus(); }, 30);
+}
+function saveWho(){
+  const v = document.getElementById('whoInput').value.trim();
+  if(!v){ document.getElementById('whoInput').focus(); return; }
+  try{ localStorage.setItem(WHO_KEY, v); }catch(e){}
+  document.getElementById('whoBack').classList.remove('show');
+  showWho();
+}
+function showWho(){
+  const b = document.getElementById('btnWho');
+  if(b) b.textContent = 'You: ' + (currentUser() || 'choose name');
+}
+document.getElementById('btnWho').addEventListener('click', openWho);
+document.getElementById('whoSave').addEventListener('click', saveWho);
+document.getElementById('whoInput').addEventListener('keydown', function(e){ if(e.key === 'Enter') saveWho(); });
+showWho();
+
+// ---- History ----
+let histRows = [];
+function openHistory(){
+  document.getElementById('histBack').classList.add('show');
+  document.getElementById('histBody').innerHTML = '<div class="pm-empty">Loading…</div>';
+  logCol.orderBy('at', 'desc').limit(300).get().then(function(snap){
+    histRows = snap.docs.map(function(d){ return d.data({serverTimestamps: 'estimate'}); });
+    renderHistory();
+  }).catch(function(err){
+    console.error('History failed', err);
+    document.getElementById('histBody').innerHTML = '<div class="pm-empty">Could not load the history.</div>';
+  });
+}
+function renderHistory(){
+  const q = document.getElementById('histSearch').value.trim().toLowerCase();
+  const only = document.getElementById('histThisMonth').checked;
+  const rows = histRows.filter(function(h){
+    if(only && h.month && h.month !== state.current) return false;
+    if(!q) return true;
+    return [h.by, h.name, fieldLabel(h.field), h.month].join(' ').toLowerCase().indexOf(q) >= 0;
+  });
+  document.getElementById('histTitle').textContent = 'History' + (only ? ' — ' + state.current : '');
+  document.getElementById('histCount').textContent = rows.length;
+  if(!rows.length){ document.getElementById('histBody').innerHTML = '<div class="pm-empty">No changes recorded yet.</div>'; return; }
+  let h = '<table><thead><tr><th>When</th><th>Who</th><th>Company</th><th>Column</th><th>Change</th>' + (only ? '' : '<th>Month</th>') + '</tr></thead><tbody>';
+  rows.forEach(function(r){
+    const change = (r.field === '(added)' || r.field === '(removed)') ? '' :
+      pmEsc(fmtVal(r.field, r.from)) + ' → <b>' + pmEsc(fmtVal(r.field, r.to)) + '</b>';
+    h += '<tr><td style="white-space:nowrap">' + pmEsc(fmtTime(r.at)) + '</td><td>' + pmEsc(r.by || '') + '</td><td>' +
+         pmEsc(r.name || '') + '</td><td>' + pmEsc(fieldLabel(r.field)) + '</td><td>' + change + '</td>' +
+         (only ? '' : '<td style="white-space:nowrap">' + pmEsc(r.month || '') + '</td>') + '</tr>';
+  });
+  document.getElementById('histBody').innerHTML = h + '</tbody></table>';
+}
+function closeHistory(){ document.getElementById('histBack').classList.remove('show'); }
+document.getElementById('btnHistory').addEventListener('click', openHistory);
+document.getElementById('histClose').addEventListener('click', closeHistory);
+document.getElementById('histBack').addEventListener('click', function(e){ if(e.target.id === 'histBack') closeHistory(); });
+document.getElementById('histSearch').addEventListener('input', renderHistory);
+document.getElementById('histThisMonth').addEventListener('change', renderHistory);
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeHistory(); });
 
 // ---- Saving on this computer ----
 // The month this computer is looking at stays on this computer and is never shared.
