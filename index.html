@@ -1868,8 +1868,13 @@ window.addEventListener('resize', function(){ if(soEl) soPaint(); });
 // The 13 checklist items. Plan Finish / Actual Finish are dates, not tasks, so they are
 // kept out of progress % and out of the status columns of the Excel export/import.
 const TASK_COLS = COLS.filter(function(c){ return !!DROPDOWN_COLS[c.key]; });
-// The card label follows the number of task columns, e.g. "FULLY DONE (13/13)".
-document.getElementById('statCompleteLabel').textContent = 'FULLY DONE (' + TASK_COLS.length + '/' + TASK_COLS.length + ')';
+// Fully done = every task column is done AND the month is signed off (Review By and Confirmed By filled in).
+function isFullyDone(row, prog){
+  return prog >= 0.999 && !!row.review_by && !!row.confirmed_by;
+}
+document.getElementById('statCompleteLabel').textContent = 'FULLY DONE (' + TASK_COLS.length + ' TASKS + SIGN-OFF)';
+document.getElementById('statCompleteLabel').parentNode.title =
+  'All ' + TASK_COLS.length + ' task columns done, and Review By and Confirmed By filled in';
 
 const GROUPS = {
   pca: ['import_', 'export'],
@@ -2004,7 +2009,7 @@ function render(){
     const prog = rowProgress(row);
     const stopped = isStopped(row), lead = isLead(row), out = stopped || lead;
     if(!out){ total++; sumProg += prog; }
-    if(out){} else if(prog >= 0.999) complete++;
+    if(out){} else if(isFullyDone(row, prog)) complete++;
     else if(prog <= 0.001) zero++;
     else inprog++;
 
@@ -2110,7 +2115,7 @@ function updateStats(){
     if(isOut(row)) return;
     const prog = rowProgress(row);
     total++; sumProg += prog;
-    if(prog >= 0.999) complete++; else if(prog <= 0.001) zero++; else inprog++;
+    if(isFullyDone(row, prog)) complete++; else if(prog <= 0.001) zero++; else inprog++;
     if(groupProgress(row, GROUPS.pca) < 0.999) pendingPCA++;
     if(groupProgress(row, GROUPS.bk) < 0.999) pendingBK++;
     if(groupProgress(row, GROUPS.tax) < 0.999) pendingTAX++;
@@ -2422,7 +2427,7 @@ function exportSchedule(rows, opts){
     if(isOut(r)) return;
     const pr = rowProgress(r);
     sm.active++; sm.sum += pr;
-    if(pr >= 0.999) sm.done++; else if(pr <= 0.001) sm.zero++; else sm.prog++;
+    if(isFullyDone(r, pr)) sm.done++; else if(pr <= 0.001) sm.zero++; else sm.prog++;
     if(groupProgress(r, GROUPS.pca) < 0.999) sm.pca++;
     if(groupProgress(r, GROUPS.bk) < 0.999) sm.bk++;
     if(groupProgress(r, GROUPS.tax) < 0.999) sm.tax++;
@@ -2433,7 +2438,7 @@ function exportSchedule(rows, opts){
   const aoa = [];
   aoa.push(['ALCKH Working Report — ' + state.current]);
   aoa.push(['Exported ' + stamp + ' · ' + (opts.view || 'All companies') + ' · ' + rows.length + ' compan' + (rows.length === 1 ? 'y' : 'ies') + ' in this file']);
-  aoa.push(['SUMMARY', 'Active', 'Fully done', 'In progress', 'Not started', 'PCA pending', 'BK pending', 'TAX pending', 'New in', 'Stopped', 'Leads', 'Overall %']);
+  aoa.push(['SUMMARY', 'Active', 'Fully done + signed off', 'In progress', 'Not started', 'PCA pending', 'BK pending', 'TAX pending', 'New in', 'Stopped', 'Leads', 'Overall %']);
   aoa.push([null, sm.active, sm.done, sm.prog, sm.zero, sm.pca, sm.bk, sm.tax, sm.nIn, sm.nOut, sm.lead, overall]);
   aoa.push([]);
   const HDR = aoa.length; // group-header row; the column-header row follows it
