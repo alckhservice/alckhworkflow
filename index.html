@@ -782,17 +782,29 @@ const STORAGE_KEY = 'alckh_working_report_v2';
 const FIRST_MONTH = 'August 2026';
 
 // Sort months chronologically (by month and year)
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+// A valid month label is exactly "<Month name> <4-digit year>", e.g. "October 2026".
+function isValidMonthLabel(label){
+  const p = String(label || '').trim().split(' ');
+  return p.length === 2 && MONTH_NAMES.indexOf(p[0]) >= 0 && /^\d{4}$/.test(p[1]);
+}
+
+// Sort months chronologically. Labels that do not follow "Month YYYY" go to the end
+// (in name order) instead of breaking the sort.
 function sortMonthsChronologically(monthOrder){
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const keyOf = function(label){
+    const p = String(label || '').trim().split(' ');
+    const mi = MONTH_NAMES.indexOf(p[0]);
+    const yr = parseInt(p[1], 10);
+    return (mi < 0 || isNaN(yr)) ? null : yr * 12 + mi;
+  };
   return monthOrder.slice().sort((a, b) => {
-    const aParts = a.split(' ');
-    const bParts = b.split(' ');
-    const aMonth = monthNames.indexOf(aParts[0]);
-    const bMonth = monthNames.indexOf(bParts[0]);
-    const aYear = parseInt(aParts[1]);
-    const bYear = parseInt(bParts[1]);
-    if(aYear !== bYear) return aYear - bYear;
-    return aMonth - bMonth;
+    const ka = keyOf(a), kb = keyOf(b);
+    if(ka === null && kb === null) return String(a).localeCompare(String(b));
+    if(ka === null) return 1;
+    if(kb === null) return -1;
+    return ka - kb;
   });
 }
 
@@ -830,9 +842,44 @@ function pushToCloud(){
   saveTimer = setTimeout(()=>{
     fullSaveScheduled = false;
     let p;
-    try{ p = docRef.set(state); }catch(e){ p = Promise.reject(e); }
-    p.then(()=>{
+    let restored = false;
+    try{
+      // Read the cloud copy and write the merged result in one transaction, so a device with an
+      // older copy cannot erase months it does not know about (for example a month a teammate
+      // created on another device). Months the user deleted or renamed away are listed in
+      // state.deleted and are NOT brought back.
+      p = db.runTransaction(function(tx){
+        return tx.get(docRef).then(function(snap){
+          const merged = JSON.parse(JSON.stringify(state));
+          merged.deleted = merged.deleted || [];
+          restored = false;
+          const cloud = snap.exists ? snap.data() : null;
+          if(cloud && cloud.months && cloud.order){
+            cloud.order.forEach(function(m){
+              if(!cloud.months[m]) return;
+              if(merged.months[m] || merged.deleted.indexOf(m) >= 0) return;
+              merged.months[m] = cloud.months[m];
+              merged.order.push(m);
+              if(cloud.locked && cloud.locked[m] !== undefined) merged.locked[m] = cloud.locked[m];
+              restored = true;
+            });
+            merged.order = sortMonthsChronologically(merged.order);
+            merged.fixes = Object.assign({}, cloud.fixes || {}, merged.fixes || {});
+          }
+          tx.set(docRef, merged);
+          return merged;
+        });
+      });
+    }catch(e){ p = Promise.reject(e); }
+    p.then((merged)=>{
       setSyncStatus('Synced ✓');
+      if(restored && merged){
+        // A month was brought back from the cloud: show it on this screen too.
+        state.months = merged.months; state.order = merged.order; state.locked = merged.locked; state.fixes = merged.fixes;
+        if(state.order.indexOf(state.current) < 0) state.current = state.order[state.order.length - 1];
+        saveLocal();
+        render();
+      }
     }).catch((e)=>{
       setSyncStatus('Offline — saved on this device only');
       console.error('Firestore save failed', e);
@@ -1680,11 +1727,15 @@ document.getElementById('btnRenameMonth').addEventListener('click', function(){
   const name = prompt('Rename this month:', state.current);
   if(name && name.trim() && name.trim() !== state.current){
     const newName = name.trim();
+    if(!isValidMonthLabel(newName)){ alert('Use the month name and year, for example "October 2026".'); return; }
     if(state.months[newName]){ alert('A month with that name already exists.'); return; }
+    state.deleted = (state.deleted || []).filter(function(m){ return m !== newName; });
+    state.deleted.push(state.current); // so the cloud merge does not bring the old name back
     state.months[newName] = state.months[state.current];
     delete state.months[state.current];
     const idx = state.order.indexOf(state.current);
     state.order[idx] = newName;
+    state.order = sortMonthsChronologically(state.order);
     if(state.locked[state.current] !== undefined){
       state.locked[newName] = state.locked[state.current];
       delete state.locked[state.current];
@@ -1699,7 +1750,9 @@ document.getElementById('btnNewMonth').addEventListener('click', function(){
   const name = prompt('Name the new month (same company list, Plan Finish and Review By / Confirmed By kept; tasks and Actual Finish Date cleared):', suggested);
   if(!name || !name.trim()) return;
   const clean = name.trim();
+  if(!isValidMonthLabel(clean)){ alert('Use the month name and year, for example "October 2026".'); return; }
   if(state.months[clean]){ alert('That month already exists — switch to it from the dropdown instead.'); return; }
+  state.deleted = (state.deleted || []).filter(function(m){ return m !== clean; });
   const baseRows = state.months[state.order[state.order.length-1]].rows;
   const rows = baseRows.map(function(r){
     const nr = {name:r.name};
@@ -1723,6 +1776,8 @@ document.getElementById('btnDeleteMonth').addEventListener('click', function(){
   if(state.order.length <= 1) return;
   if(confirm('Delete "' + state.current + '" completely? This cannot be undone.')){
     const idx = state.order.indexOf(state.current);
+    state.deleted = (state.deleted || []).filter(function(m){ return m !== state.current; });
+    state.deleted.push(state.current); // so the cloud merge does not bring it back
     delete state.months[state.current];
     delete state.locked[state.current];
     state.order.splice(idx,1);
@@ -1973,6 +2028,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
       let suffix = 2;
       while(state.months[label]){ label = (sheetName||'Imported Schedule') + ' (' + suffix + ')'; suffix++; }
       state.months[label] = {rows: newRows};
+      state.deleted = (state.deleted || []).filter(function(m){ return m !== label; });
       state.order.push(label);
       state.current = label;
       render();
