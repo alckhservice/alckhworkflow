@@ -5,8 +5,8 @@ rules_version = '2';
 // (or paste into Firebase Console → Firestore Database → Rules → Publish)
 //
 // Two apps share this project:
-//   - alckh_working_flow_report  → ALCKH Working Flow Report (this repo), team login required
-//   - alckh_kv                   → another ALCKH app; still open because it has no login yet
+//   - ALCKH Working Flow Report (this repo) → team login required
+//   - alckh_kv                              → another ALCKH app; still open because it has no login yet
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -15,7 +15,15 @@ service cloud.firestore {
         && request.auth.token.email == 'team@alckh-control-a868c.firebaseapp.com';
     }
 
-    // Working Flow Report — only the signed-in team account.
+    // Working Flow Report — current layout: one record per company per month, plus one settings record.
+    match /wfr_rows/{docId} {
+      allow read, write: if isTeam();
+    }
+    match /wfr_meta/{docId} {
+      allow read, write: if isTeam();
+    }
+
+    // Working Flow Report — old single-document layout, kept so the one-time copy can read it.
     match /alckh_working_flow_report/{docId} {
       allow read, write: if isTeam();
     }

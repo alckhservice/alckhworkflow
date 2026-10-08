@@ -831,62 +831,91 @@ function setSyncStatus(text){
   if(el) el.textContent = text;
 }
 
-let fullSavesPending = 0; // whole-state saves scheduled or not yet confirmed by the cloud
-let fullSaveScheduled = false;
-function pushToCloud(){
-  if(applyingRemote) return;
-  if(!initialSyncDone) return; // never push this device's local/starting copy until it has been reconciled with the cloud at least once
-  clearTimeout(saveTimer);
-  if(!fullSaveScheduled){ fullSaveScheduled = true; fullSavesPending++; }
-  setSyncStatus('Syncing…');
-  saveTimer = setTimeout(()=>{
-    fullSaveScheduled = false;
-    let p;
-    let restored = false;
-    try{
-      // Read the cloud copy and write the merged result in one transaction, so a device with an
-      // older copy cannot erase months it does not know about (for example a month a teammate
-      // created on another device). Months the user deleted or renamed away are listed in
-      // state.deleted and are NOT brought back.
-      p = db.runTransaction(function(tx){
-        return tx.get(docRef).then(function(snap){
-          const merged = JSON.parse(JSON.stringify(state));
-          merged.deleted = merged.deleted || [];
-          restored = false;
-          const cloud = snap.exists ? snap.data() : null;
-          if(cloud && cloud.months && cloud.order){
-            cloud.order.forEach(function(m){
-              if(!cloud.months[m]) return;
-              if(merged.months[m] || merged.deleted.indexOf(m) >= 0) return;
-              merged.months[m] = cloud.months[m];
-              merged.order.push(m);
-              if(cloud.locked && cloud.locked[m] !== undefined) merged.locked[m] = cloud.locked[m];
-              restored = true;
-            });
-            merged.order = sortMonthsChronologically(merged.order);
-            merged.fixes = Object.assign({}, cloud.fixes || {}, merged.fixes || {});
-          }
-          tx.set(docRef, merged);
-          return merged;
-        });
-      });
-    }catch(e){ p = Promise.reject(e); }
-    p.then((merged)=>{
-      setSyncStatus('Synced ✓');
-      if(restored && merged){
-        // A month was brought back from the cloud: show it on this screen too.
-        state.months = merged.months; state.order = merged.order; state.locked = merged.locked; state.fixes = merged.fixes;
-        if(state.order.indexOf(state.current) < 0) state.current = state.order[state.order.length - 1];
-        saveLocal();
-        render();
-      }
-    }).catch((e)=>{
-      setSyncStatus('Offline — saved on this device only');
-      console.error('Firestore save failed', e);
-    }).then(()=>{ fullSavesPending = Math.max(0, fullSavesPending - 1); });
-  }, 600);
+// ---- Shared data: send only what this device changed ----
+// The cloud document holds the shared data (companies, months, locks, one-time fixes).
+// The month a computer is looking at is NOT shared; each computer keeps its own.
+//
+// cloudBase = the shared data as this device last saw it in the cloud.
+// On a save, the device compares its copy with cloudBase, reads the latest cloud copy inside a
+// transaction, and applies ONLY its own changes to that copy. Rows this device did not change
+// are taken from the cloud, so a computer with an older copy can no longer overwrite a
+// teammate's work in other companies or other months.
+let cloudBase = null;
+let pendingShared = false;   // a shared save waited until cell saves finish
+
+function canon(v){ // JSON with sorted keys, so equal data always gives equal text
+  if(Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+  if(v && typeof v === 'object'){
+    return '{' + Object.keys(v).sort().filter(function(k){ return v[k] !== undefined; })
+      .map(function(k){ return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}';
+  }
+  return JSON.stringify(v === undefined ? null : v);
+}
+function sharedOf(s){
+  return {months: s.months || {}, order: s.order || [], locked: s.locked || {}, fixes: s.fixes || {}};
+}
+function sharedCopy(s){ return JSON.parse(JSON.stringify(sharedOf(s))); }
+
+// Rows are matched by company name (plus its position among rows with the same name).
+function keyRows(rows){
+  const seen = {}, out = [];
+  (rows || []).forEach(function(r){
+    if(!r) return;
+    const n = String(r.name || '');
+    seen[n] = (seen[n] || 0) + 1;
+    out.push([n + '\u0000' + seen[n], r]);
+  });
+  return out;
 }
 
+// Three-way merge of one month's rows.
+//   baseRows  = what this device last saw in the cloud
+//   localRows = what this device has now
+//   cloudRows = the latest cloud copy
+// A row this device changed or added keeps this device's version. A row it did not change
+// takes the latest cloud version (or is dropped if a teammate removed it). Rows only a teammate
+// added are kept.
+function mergeRows(baseRows, localRows, cloudRows){
+  const B = new Map(keyRows(baseRows)), C = new Map(keyRows(cloudRows));
+  const L = keyRows(localRows), LK = new Set(L.map(function(x){ return x[0]; }));
+  const out = [];
+  L.forEach(function(item){
+    const k = item[0], row = item[1];
+    const b = B.get(k);
+    if(!b || canon(b) !== canon(row)){ out.push(row); return; }   // changed or added here
+    if(C.has(k)) out.push(C.get(k));                              // unchanged here: latest cloud version
+  });
+  keyRows(cloudRows).forEach(function(item){
+    if(!B.has(item[0]) && !LK.has(item[0])) out.push(item[1]);   // added by a teammate
+  });
+  return out;
+}
+
+// Merge the shared data. Months are merged one at a time; a month this device did not touch is
+// taken from the cloud as it is now.
+function mergeShared(base, local, cloud){
+  const bm = base.months || {}, lm = local.months || {}, cm = cloud.months || {};
+  const names = Object.keys(Object.assign({}, bm, lm, cm));
+  const months = {};
+  names.forEach(function(m){
+    const bRows = bm[m] && bm[m].rows, lRows = lm[m] && lm[m].rows, cRows = cm[m] && cm[m].rows;
+    if(!lm[m] && bm[m]) return;                                   // deleted on this device
+    if(!bm[m] && cm[m] && lm[m]){ months[m] = cm[m]; return; }    // same new name created on both: keep the cloud copy
+    if(canon(bRows) === canon(lRows)){ if(cm[m]) months[m] = cm[m]; return; } // not changed here
+    months[m] = {rows: mergeRows(bRows || [], lRows || [], cRows || [])};
+  });
+  const locked = Object.assign({}, cloud.locked || {}, local.locked || {});
+  Object.keys(locked).forEach(function(m){ if(!months[m]) delete locked[m]; });
+  return {
+    months: months,
+    order: sortMonthsChronologically(Object.keys(months)),
+    locked: locked,
+    fixes: Object.assign({}, cloud.fixes || {}, local.fixes || {})
+  };
+}
+
+let fullSavesPending = 0; // shared saves scheduled or not yet confirmed by the cloud
+let fullSaveScheduled = false;
 // One-time data fixes, run once against the cloud copy and remembered in state.fixes.
 // Each fills BLANK cells only, from the previous month's value for the same company:
 //   signoffCarry1    → Review By / Confirmed By
@@ -922,156 +951,262 @@ function runOneTimeFixes(){
   render(); // saves to the cloud
 }
 
-function startCloudSync(){
-  docRef.onSnapshot((snap)=>{
-    if(!snap.exists){
-      // No cloud copy yet — seed it with whatever we have locally.
-      initialSyncDone = true;
-      pushToCloud();
-      setSyncStatus('Synced ✓ (first sync)');
-      return;
-    }
-    if(snap.metadata.hasPendingWrites){ initialSyncDone = true; return; } // this is our own just-sent write, ignore
-    const remote = snap.data();
-    if(remote && remote.months && remote.order && remote.order.length){
-      // This copy may not include our own edits that are still on their way to the cloud;
-      // lay them back on top so they neither vanish from the screen nor get lost later.
-      overlayPendingCells(remote);
-      applyRemote(remote);
-    }
-    initialSyncDone = true;
-    runOneTimeFixes();
-  }, (err)=>{
-    console.error('Firestore listen failed', err);
-    initialSyncDone = true; // give up waiting for the cloud so this device can at least keep working (and saving) locally
-    setSyncStatus('Offline — using last saved copy on this device');
+// ---- Cloud storage (per-company records) ----
+// Layout:
+//   wfr_meta/config : { order: [month labels], locked: {...}, fixes: {...} }
+//   wfr_rows/<id>   : one company in one month: { month, pos, ...row fields }
+// Each change writes only the fields that changed, and each write first checks that the cloud still
+// holds the value this computer last saw. People working on different companies, or on different
+// fields, never overwrite each other. A cell that a teammate changed first is not overwritten: this
+// computer shows the teammate's value and says so.
+const metaRef = db.collection('wfr_meta').doc('config');
+const rowsCol = db.collection('wfr_rows');
+let metaSeen = false, rowsSeen = false, metaMissing = false;
+let cloudMeta = null, cloudRowDocs = [];
+let pushTimer = null, pushRunning = false, pushAgain = false, pushRetryDelay = 3000, migrating = false;
+
+function deleteField(){ return firebase.firestore.FieldValue.delete(); }
+function plain(v){ return JSON.parse(JSON.stringify(v)); } // drops undefined, as Firestore does
+function rowDocId(month, key){ return encodeURIComponent(month + '|' + key); }
+function nameOfKey(key){ return key.split('\u0000')[0]; }
+
+// Every change between what the cloud holds (base) and what this computer has (local).
+function diffShared(base, local){
+  const ops = [];
+  const bm = base.months || {}, lm = local.months || {};
+  Object.keys(Object.assign({}, bm, lm)).forEach(function(m){
+    const bItems = keyRows(bm[m] && bm[m].rows), lItems = keyRows(lm[m] && lm[m].rows);
+    const bMap = new Map(bItems.map(function(it, i){ return [it[0], {row: it[1], pos: i}]; }));
+    const lKeys = new Set(lItems.map(function(it){ return it[0]; }));
+    lItems.forEach(function(it, pos){
+      const key = it[0], row = plain(it[1]), id = rowDocId(m, key), b = bMap.get(key);
+      if(!b){
+        ops.push({kind: 'set', id: id, month: m, name: nameOfKey(key), data: Object.assign({month: m, pos: pos}, row)});
+        return;
+      }
+      const baseRow = plain(b.row), fields = {}, prev = {};
+      Object.keys(Object.assign({}, row, baseRow)).forEach(function(f){
+        if(canon(row[f]) === canon(baseRow[f])) return;
+        fields[f] = (row[f] === undefined) ? deleteField() : row[f];
+        prev[f] = baseRow[f];
+      });
+      if(b.pos !== pos){ fields.pos = pos; prev.pos = b.pos; }
+      if(Object.keys(fields).length){
+        ops.push({kind: 'update', id: id, month: m, name: nameOfKey(key), fields: fields, prev: prev,
+                  full: Object.assign({month: m, pos: pos}, row)});
+      }
+    });
+    bItems.forEach(function(it){
+      if(!lKeys.has(it[0])) ops.push({kind: 'delete', id: rowDocId(m, it[0])});
+    });
   });
+  const metaNow = {order: local.order || [], locked: local.locked || {}, fixes: local.fixes || {}};
+  const metaWas = {order: base.order || [], locked: base.locked || {}, fixes: base.fixes || {}};
+  if(canon(metaNow) !== canon(metaWas)) ops.push({kind: 'meta', data: plain(metaNow)});
+  return ops;
 }
 
-// ---- Per-change cloud saves ----
-// A status or date edit no longer uploads the whole database. saveCell() runs a Firestore
-// transaction that reads the latest cloud copy, changes only that one cell in it, and writes
-// back only the current month's rows. If a teammate saved at the same moment, Firestore
-// re-runs the transaction on top of their change, so neither edit is lost.
-// Structural changes (add/remove rows, months, import, clear, sort, rename) still use the
-// full-state pushToCloud() exactly as before.
-let cellQueue = [];          // edits waiting for the next transaction
-let cellInFlight = [];       // edits in the transaction currently running
-let cellFlushing = false;
-let cellRetryTimer = null;
-let cellRetryDelay = 5000;
+// Build the shared data from the cloud records.
+function sharedFromCloud(meta, docs){
+  const byMonth = {};
+  (docs || []).forEach(function(d){
+    if(!d || !d.month) return;
+    const row = Object.assign({}, d);
+    const pos = row.pos || 0;
+    delete row.month; delete row.pos;
+    (byMonth[d.month] = byMonth[d.month] || []).push([pos, row]);
+  });
+  const months = {};
+  (meta.order || []).concat(Object.keys(byMonth)).forEach(function(m){
+    if(months[m]) return;
+    months[m] = {rows: (byMonth[m] || []).sort(function(a, b){ return a[0] - b[0]; }).map(function(x){ return x[1]; })};
+  });
+  return {months: months, order: sortMonthsChronologically(Object.keys(months)),
+          locked: meta.locked || {}, fixes: meta.fixes || {}};
+}
+
+// Writes that are not field updates: new rows, removed rows and the month list. Sent in batches.
+async function writePlain(ops){
+  const sorted = ops.slice().sort(function(a, b){ return (a.kind === 'meta') - (b.kind === 'meta'); });
+  for(let i = 0; i < sorted.length; i += 400){
+    const batch = db.batch();
+    sorted.slice(i, i + 400).forEach(function(o){
+      if(o.kind === 'meta') batch.set(metaRef, o.data);
+      else if(o.kind === 'set') batch.set(rowsCol.doc(o.id), o.data);
+      else if(o.kind === 'delete') batch.delete(rowsCol.doc(o.id));
+    });
+    await batch.commit();
+  }
+}
+
+function patchBase(month, name, field, value){
+  const m = cloudBase && cloudBase.months && cloudBase.months[month];
+  const r = m && m.rows && m.rows.find(function(x){ return x && x.name === name; });
+  if(!r) return;
+  if(value === undefined) delete r[field]; else r[field] = value;
+}
+
+function schedulePush(){
+  if(applyingRemote || !initialSyncDone || !cloudBase) return;
+  setSyncStatus('Syncing…');
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(runPush, 400);
+}
+function pushToCloud(){ schedulePush(); } // older name, still used by saveState()
+
+async function runPush(){
+  pushTimer = null;
+  if(pushRunning){ pushAgain = true; return; }
+  if(!cloudBase) return;
+  const ops = diffShared(cloudBase, sharedCopy(state));
+  if(!ops.length){ setSyncStatus('Synced ✓'); return; }
+  pushRunning = true;
+  const conflicts = [];
+  try{
+    await writePlain(ops.filter(function(o){ return o.kind !== 'update'; }));
+    const updates = ops.filter(function(o){ return o.kind === 'update'; });
+    for(const o of updates){
+      const ref = rowsCol.doc(o.id);
+      const found = await db.runTransaction(function(tx){
+        const mine = [];
+        return tx.get(ref).then(function(snap){
+          if(!snap.exists){ tx.set(ref, o.full); return mine; } // a teammate removed this company: our row is written back
+          const cur = snap.data(), write = {};
+          Object.keys(o.fields).forEach(function(f){
+            if(canon(cur[f]) !== canon(o.prev[f])){ mine.push({month: o.month, name: o.name, field: f, value: cur[f]}); return; }
+            write[f] = o.fields[f];
+          });
+          if(Object.keys(write).length) tx.update(ref, write);
+          return mine;
+        });
+      });
+      conflicts.push.apply(conflicts, found);
+    }
+    if(conflicts.length){
+      conflicts.forEach(function(c){ patchBase(c.month, c.name, c.field, c.value); });
+      applyReverts(conflicts);
+      setSyncStatus('Some edits were replaced by a teammate\'s newer change — please check those cells');
+    } else {
+      setSyncStatus('Synced ✓');
+    }
+    pushRetryDelay = 3000;
+  }catch(err){
+    console.error('Save failed', err);
+    if(err && err.code === 'permission-denied'){
+      setSyncStatus('Not saved — this account is not allowed to save (check sign-in)');
+    } else {
+      setSyncStatus('Offline — changes will be sent when the connection is back');
+      clearTimeout(pushTimer);
+      pushTimer = setTimeout(runPush, pushRetryDelay);
+      pushRetryDelay = Math.min(pushRetryDelay * 2, 60000);
+    }
+  }finally{
+    pushRunning = false;
+  }
+  if(pushAgain){ pushAgain = false; schedulePush(); }
+}
+
+// The cloud sent new data (from any computer). Combine it with anything this computer has not sent yet.
+function onCloudData(){
+  if(!metaSeen || !rowsSeen) return;
+  if(metaMissing){ migrateToNewLayout(); return; }
+  const remote = sharedFromCloud(cloudMeta || {}, cloudRowDocs);
+  if(!remote.order.length){ // empty cloud: this computer's copy becomes the first one
+    cloudBase = {months: {}, order: [], locked: {}, fixes: {}};
+    initialSyncDone = true;
+    schedulePush();
+    return;
+  }
+  const merged = cloudBase ? mergeShared(cloudBase, sharedCopy(state), remote) : remote;
+  cloudBase = remote;
+  applyRemote(merged);
+  initialSyncDone = true;
+  runOneTimeFixes();
+  schedulePush();
+}
+
+// One time: copy the old single-document data into the new layout.
+function migrateToNewLayout(){
+  if(migrating) return;
+  migrating = true;
+  setSyncStatus('Setting up shared storage (one time)…');
+  docRef.get().then(function(old){
+    const src = (old.exists && old.data().months) ? sharedCopy(old.data()) : sharedCopy(state);
+    return writePlain(diffShared({months: {}, order: [], locked: {}, fixes: {}}, src));
+  }).then(function(){
+    setSyncStatus('Synced ✓');
+  }).catch(function(err){
+    console.error('Migration failed', err);
+    setSyncStatus('Could not set up shared storage — check sign-in');
+  }).then(function(){ migrating = false; });
+}
+
+function startCloudSync(){
+  metaRef.onSnapshot(function(snap){
+    metaSeen = true;
+    metaMissing = !snap.exists;
+    cloudMeta = snap.exists ? snap.data() : null;
+    onCloudData();
+  }, onCloudError);
+  rowsCol.onSnapshot(function(snap){
+    rowsSeen = true;
+    cloudRowDocs = snap.docs.map(function(d){ return d.data(); });
+    onCloudData();
+  }, onCloudError);
+}
+function onCloudError(err){
+  console.error('Firestore listen failed', err);
+  setSyncStatus(err && err.code === 'permission-denied' ? 'Not allowed — please sign in again' : 'Offline — using last saved copy on this device');
+}
+
+// ---- Saving on this computer ----
+// The month this computer is looking at stays on this computer and is never shared.
+const VIEW_KEY = 'alckh_working_report_view';
+function saveView(){
+  try{ localStorage.setItem(VIEW_KEY, state.current); }catch(e){}
+}
 
 function saveLocal(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  saveView();
   const now = new Date();
   document.getElementById('lastSaved').textContent = 'Saved ' + now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
 }
 
-// Find a company's row in a rows array: same position and name, otherwise a UNIQUE name
-// match (so duplicate names such as "New Company" can never receive someone else's edit).
+// Find a company's row in a rows array: same position and name, otherwise a UNIQUE name match.
 function findRowIndex(rows, idx, name){
   if(rows[idx] && rows[idx].name === name) return idx;
   const hits = []; rows.forEach(function(r, k){ if(r && r.name === name) hits.push(k); });
   return hits.length === 1 ? hits[0] : -1;
 }
 
-// Missing, null and '' all mean "not set" (older rows may lack a field entirely).
+// Missing, null and '' all mean "not set".
 function sameCell(a, b){
   const n = function(v){ return (v === undefined || v === null || v === '' || v === false) ? false : v; };
   return n(a) === n(b);
 }
 
-// Lay our not-yet-confirmed edits on top of an incoming copy — but only where that cell still
-// holds the value it had before our edit. If a teammate already changed the same cell, theirs wins.
-function overlayPendingCells(remote){
-  cellInFlight.concat(cellQueue).forEach(function(c){
-    const m = remote.months && remote.months[c.month];
-    if(!m || !Array.isArray(m.rows)) return;
-    const i = findRowIndex(m.rows, c.idx, c.name);
-    if(i >= 0 && sameCell(m.rows[i][c.field], c.prev)) m.rows[i][c.field] = c.value;
+// Show a teammate's value in cells this computer could not save.
+function applyReverts(list){
+  if(!list || !list.length) return;
+  let changed = false;
+  list.forEach(function(c){
+    const m = state.months[c.month];
+    if(!m || !m.rows) return;
+    const i = findRowIndex(m.rows, -1, c.name);
+    if(i < 0) return;
+    m.rows[i][c.field] = c.value;
+    changed = true;
   });
+  if(changed){ saveLocal(); render(); }
 }
 
+// Called by the cell handlers after a change on this computer.
 function saveCell(idx, field, prev){
   saveLocal();
   if(applyingRemote) return;
-  if(!initialSyncDone) return; // same guard as pushToCloud: never write before the first cloud copy has arrived
-  const row = currentRows()[idx];
-  if(!row) return;
-  cellQueue.push({month: state.current, idx: idx, name: row.name, field: field, value: row[field], prev: prev});
-  setSyncStatus('Syncing…');
-  flushCells();
+  schedulePush();
 }
-
-// Sends every queued edit in ONE transaction; edits made while it runs go in the next one.
-// On failure (offline, timeout) the edits go back to the front of the queue and are retried —
-// this never falls back to uploading the whole database.
-function flushCells(){
-  if(cellFlushing || !cellQueue.length) return;
-  clearTimeout(cellRetryTimer); cellRetryTimer = null;
-  cellFlushing = true;
-  const batch = cellQueue; cellQueue = [];
-  cellInFlight = batch;
-  let abandoned = false;
-  let skippedNames = [];
-  const txDone = Promise.resolve().then(function(){ return db.runTransaction(function(tx){
-    // Firestore may re-run this function; a batch we gave up on must never write late.
-    if(abandoned) throw new Error('abandoned');
-    return tx.get(docRef).then(function(snap){
-      if(abandoned) throw new Error('abandoned');
-      skippedNames = [];
-      const data = snap.exists ? snap.data() : null;
-      const touched = {};
-      batch.forEach(function(c){
-        const m = data && data.months && data.months[c.month];
-        if(!m || !Array.isArray(m.rows)){ skippedNames.push(c.name); return; }
-        const i = findRowIndex(m.rows, c.idx, c.name);
-        if(i < 0){ skippedNames.push(c.name); return; } // renamed/removed by a teammate meanwhile: don't overwrite
-        const now = m.rows[i][c.field];
-        if(!sameCell(now, c.prev) && !sameCell(now, c.value)){ skippedNames.push(c.name); return; } // a teammate changed this same cell first: keep theirs
-        const updated = Object.assign({}, m.rows[i]); updated[c.field] = c.value;
-        m.rows[i] = updated;
-        touched[c.month] = m.rows;
-      });
-      Object.keys(touched).forEach(function(month){
-        tx.update(docRef, new firebase.firestore.FieldPath('months', month, 'rows'), touched[month]);
-      });
-    });
-  }); });
-  const timeout = new Promise(function(_, reject){ setTimeout(function(){ reject(new Error('timeout')); }, 20000); });
-  Promise.race([txDone, timeout]).then(function(){
-    cellInFlight = [];
-    cellRetryDelay = 5000;
-    // An edit on a company added on this device moments ago reaches the cloud with that
-    // add's own full save, so only warn about companies that no longer exist here either.
-    const lost = skippedNames.filter(function(n){
-      return !(fullSavesPending && currentRows().some(function(r){ return r.name === n; }));
-    });
-    if(lost.length) setSyncStatus('Not saved — a teammate changed that company at the same time, please check it and redo');
-    else if(!cellQueue.length && !fullSavesPending) setSyncStatus('Synced ✓');
-  }, function(err){
-    abandoned = true;
-    cellInFlight = [];
-    const code = err && err.code, msg = err && err.message;
-    const retryable = msg === 'timeout' || code === 'unavailable' || code === 'deadline-exceeded' || code === 'aborted' || code === 'resource-exhausted';
-    if(retryable){
-      cellQueue = batch.concat(cellQueue); // keep the order: older edits first
-      setSyncStatus('Offline — your changes will be sent when the connection is back');
-      console.warn('Cell save failed, will retry', err);
-      clearTimeout(cellRetryTimer);
-      cellRetryTimer = setTimeout(function(){ cellRetryTimer = null; flushCells(); }, cellRetryDelay);
-      cellRetryDelay = Math.min(cellRetryDelay * 2, 60000);
-    } else {
-      // Permanent problem (e.g. permission): don't loop; tell the user. The next cloud update restores the screen.
-      setSyncStatus('Not saved — could not save that change (' + (code || 'error') + '), please try again');
-      console.error('Cell save failed', err);
-    }
-  }).then(function(){
-    cellFlushing = false;
-    if(cellQueue.length && !cellRetryTimer) flushCells();
-  });
-}
-window.addEventListener('online', function(){ if(cellQueue.length){ clearTimeout(cellRetryTimer); cellRetryTimer = null; flushCells(); } });
 
 // Apply a copy of the data that arrived from the cloud. When only cells of the month on
 // screen changed, update just those cells instead of redrawing the whole table.
@@ -1080,6 +1215,8 @@ function applyRemote(remote){
   try{
     if(!remote.locked) remote.locked = {};
     remote.order = sortMonthsChronologically(remote.order);
+    // Keep this computer's own month. Fall back to the latest month only if it no longer exists.
+    remote.current = remote.months[state.current] ? state.current : remote.order[remote.order.length - 1];
     if(!patchRemote(remote)){
       state = remote;
       renderView();
@@ -1149,9 +1286,14 @@ function loadState(){
 }
 
 let state = loadState();
+try{ // restore this computer's own month
+  const savedView = localStorage.getItem('alckh_working_report_view');
+  if(savedView && state.months[savedView]) state.current = savedView;
+}catch(e){}
 
 function saveState(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  saveView();
   const now = new Date();
   document.getElementById('lastSaved').textContent = 'Saved ' + now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
   pushToCloud();
@@ -1729,8 +1871,6 @@ document.getElementById('btnRenameMonth').addEventListener('click', function(){
     const newName = name.trim();
     if(!isValidMonthLabel(newName)){ alert('Use the month name and year, for example "October 2026".'); return; }
     if(state.months[newName]){ alert('A month with that name already exists.'); return; }
-    state.deleted = (state.deleted || []).filter(function(m){ return m !== newName; });
-    state.deleted.push(state.current); // so the cloud merge does not bring the old name back
     state.months[newName] = state.months[state.current];
     delete state.months[state.current];
     const idx = state.order.indexOf(state.current);
@@ -1752,7 +1892,6 @@ document.getElementById('btnNewMonth').addEventListener('click', function(){
   const clean = name.trim();
   if(!isValidMonthLabel(clean)){ alert('Use the month name and year, for example "October 2026".'); return; }
   if(state.months[clean]){ alert('That month already exists — switch to it from the dropdown instead.'); return; }
-  state.deleted = (state.deleted || []).filter(function(m){ return m !== clean; });
   const baseRows = state.months[state.order[state.order.length-1]].rows;
   const rows = baseRows.map(function(r){
     const nr = {name:r.name};
@@ -1776,8 +1915,6 @@ document.getElementById('btnDeleteMonth').addEventListener('click', function(){
   if(state.order.length <= 1) return;
   if(confirm('Delete "' + state.current + '" completely? This cannot be undone.')){
     const idx = state.order.indexOf(state.current);
-    state.deleted = (state.deleted || []).filter(function(m){ return m !== state.current; });
-    state.deleted.push(state.current); // so the cloud merge does not bring it back
     delete state.months[state.current];
     delete state.locked[state.current];
     state.order.splice(idx,1);
@@ -2028,7 +2165,6 @@ document.getElementById('fileInput').addEventListener('change', function(e){
       let suffix = 2;
       while(state.months[label]){ label = (sheetName||'Imported Schedule') + ' (' + suffix + ')'; suffix++; }
       state.months[label] = {rows: newRows};
-      state.deleted = (state.deleted || []).filter(function(m){ return m !== label; });
       state.order.push(label);
       state.current = label;
       render();
