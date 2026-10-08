@@ -961,8 +961,10 @@ function runOneTimeFixes(){
 // computer shows the teammate's value and says so.
 const metaRef = db.collection('wfr2_meta').doc('config');
 const rowsCol = db.collection('wfr2_rows');
-let metaSeen = false, rowsSeen = false, metaMissing = false;
-let cloudMeta = null, cloudRowDocs = [];
+let metaSeen = false, rowsSeen = false, metaMissing = false, cloudOn = false;
+let cloudMeta = null;
+const cloudByMonth = {}; // month -> the cloud's rows for that month, as last seen
+const rowWatch = {};     // month -> stop-listening function (only the month on screen is listened to)
 let pushTimer = null, pushRunning = false, pushAgain = false, pushRetryDelay = 3000, migrating = false;
 
 function deleteField(){ return firebase.firestore.FieldValue.delete(); }
@@ -1110,7 +1112,10 @@ async function runPush(){
 function onCloudData(){
   if(!metaSeen || !rowsSeen) return;
   if(metaMissing){ migrateToNewLayout(); return; }
-  const remote = sharedFromCloud(cloudMeta || {}, cloudRowDocs);
+  const order = cloudMeta ? (cloudMeta.order || []) : Object.keys(cloudByMonth);
+  const docs = [];
+  order.forEach(function(m){ (cloudByMonth[m] || []).forEach(function(r){ docs.push(r); }); });
+  const remote = sharedFromCloud(cloudMeta || {}, docs);
   if(!remote.order.length){ // empty cloud: this computer's copy becomes the first one
     cloudBase = {months: {}, order: [], locked: {}, fixes: {}};
     initialSyncDone = true;
@@ -1142,15 +1147,33 @@ function migrateToNewLayout(){
 }
 
 function startCloudSync(){
+  cloudOn = true;
   metaRef.onSnapshot(function(snap){
     metaSeen = true;
     metaMissing = !snap.exists;
     cloudMeta = snap.exists ? snap.data() : null;
     onCloudData();
   }, onCloudError);
-  rowsCol.onSnapshot(function(snap){
+  // Once at start-up: read every month so this computer has the whole shared copy.
+  rowsCol.get().then(function(snap){
+    const all = {};
+    snap.docs.forEach(function(d){
+      const r = d.data();
+      (all[r.month] = all[r.month] || []).push(r);
+    });
+    Object.keys(all).forEach(function(m){ if(!cloudByMonth[m]) cloudByMonth[m] = all[m]; });
     rowsSeen = true;
-    cloudRowDocs = snap.docs.map(function(d){ return d.data(); });
+    onCloudData();
+  }).catch(onCloudError);
+  watchMonth(state.current);
+}
+
+// Listen only to the month on screen. Other months are refreshed when they are opened.
+function watchMonth(m){
+  if(!cloudOn || !m || rowWatch[m]) return;
+  Object.keys(rowWatch).forEach(function(k){ rowWatch[k](); delete rowWatch[k]; });
+  rowWatch[m] = rowsCol.where('month', '==', m).onSnapshot(function(snap){
+    cloudByMonth[m] = snap.docs.map(function(d){ return d.data(); });
     onCloudData();
   }, onCloudError);
 }
@@ -1599,6 +1622,7 @@ function renderView(){
 }
 
 function render(){
+  watchMonth(state.current);
   const rows = currentRows();
   const tbody = document.getElementById('tbody');
   const search = document.getElementById('search').value.trim().toLowerCase();
