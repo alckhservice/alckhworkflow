@@ -1119,6 +1119,7 @@ function onCloudData(){
   }
   const merged = cloudBase ? mergeShared(cloudBase, sharedCopy(state), remote) : remote;
   cloudBase = remote;
+  saveBase(remote);
   applyRemote(merged);
   initialSyncDone = true;
   runOneTimeFixes();
@@ -1141,7 +1142,18 @@ function migrateToNewLayout(){
   }).then(function(){ migrating = false; });
 }
 
+// The last cloud copy this computer saw, kept on this computer. After a restart, or while offline,
+// it tells this computer's own unsent edits apart from the cloud's data, so they are not lost.
+const BASE_KEY = 'alckh_wfr_cloud_base_v1';
+function loadSavedBase(){
+  try{ const raw = localStorage.getItem(BASE_KEY); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+}
+function saveBase(base){
+  try{ localStorage.setItem(BASE_KEY, JSON.stringify(base)); }catch(e){}
+}
+
 function startCloudSync(){
+  if(!cloudBase) cloudBase = loadSavedBase();
   metaRef.onSnapshot(function(snap){
     metaSeen = true;
     metaMissing = !snap.exists;
