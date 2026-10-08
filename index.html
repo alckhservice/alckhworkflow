@@ -641,7 +641,7 @@
 
   <div class="stats">
     <div class="stat"><div class="n" id="statTotal">0</div><div class="l">ACTIVE COMPANIES</div></div>
-    <div class="stat complete"><div class="n" id="statComplete">0</div><div class="l">FULLY DONE (11/11)</div></div>
+    <div class="stat complete"><div class="n" id="statComplete">0</div><div class="l" id="statCompleteLabel">FULLY DONE</div></div>
     <div class="stat progress"><div class="n" id="statProgress">0</div><div class="l">IN PROGRESS</div></div>
     <div class="stat notstarted"><div class="n" id="statZero">0</div><div class="l">NOT STARTED</div></div>
     <div class="stat progress" data-pending="pca" title="Double-click to see pending clients"><div class="n" id="statPendingPCA">0</div><div class="l">PCA PENDING</div></div>
@@ -1868,6 +1868,8 @@ window.addEventListener('resize', function(){ if(soEl) soPaint(); });
 // The 13 checklist items. Plan Finish / Actual Finish are dates, not tasks, so they are
 // kept out of progress % and out of the status columns of the Excel export/import.
 const TASK_COLS = COLS.filter(function(c){ return !!DROPDOWN_COLS[c.key]; });
+// The card label follows the number of task columns, e.g. "FULLY DONE (13/13)".
+document.getElementById('statCompleteLabel').textContent = 'FULLY DONE (' + TASK_COLS.length + '/' + TASK_COLS.length + ')';
 
 const GROUPS = {
   pca: ['import_', 'export'],
