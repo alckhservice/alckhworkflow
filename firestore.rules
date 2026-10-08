@@ -16,6 +16,14 @@ service cloud.firestore {
     }
 
     // Working Flow Report — current layout: one record per company per month, plus one settings record.
+    match /wfr2_rows/{docId} {
+      allow read, write: if isTeam();
+    }
+    match /wfr2_meta/{docId} {
+      allow read, write: if isTeam();
+    }
+
+    // Working Flow Report — test-site copy (kept so the test copy keeps working; can be removed later).
     match /wfr_rows/{docId} {
       allow read, write: if isTeam();
     }

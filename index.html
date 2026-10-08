@@ -959,8 +959,8 @@ function runOneTimeFixes(){
 // holds the value this computer last saw. People working on different companies, or on different
 // fields, never overwrite each other. A cell that a teammate changed first is not overwritten: this
 // computer shows the teammate's value and says so.
-const metaRef = db.collection('wfr_meta').doc('config');
-const rowsCol = db.collection('wfr_rows');
+const metaRef = db.collection('wfr2_meta').doc('config');
+const rowsCol = db.collection('wfr2_rows');
 let metaSeen = false, rowsSeen = false, metaMissing = false;
 let cloudMeta = null, cloudRowDocs = [];
 let pushTimer = null, pushRunning = false, pushAgain = false, pushRetryDelay = 3000, migrating = false;
@@ -1119,7 +1119,6 @@ function onCloudData(){
   }
   const merged = cloudBase ? mergeShared(cloudBase, sharedCopy(state), remote) : remote;
   cloudBase = remote;
-  saveBase(remote);
   applyRemote(merged);
   initialSyncDone = true;
   runOneTimeFixes();
@@ -1142,18 +1141,7 @@ function migrateToNewLayout(){
   }).then(function(){ migrating = false; });
 }
 
-// The last cloud copy this computer saw, kept on this computer. After a restart, or while offline,
-// it tells this computer's own unsent edits apart from the cloud's data, so they are not lost.
-const BASE_KEY = 'alckh_wfr_cloud_base_v1';
-function loadSavedBase(){
-  try{ const raw = localStorage.getItem(BASE_KEY); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
-}
-function saveBase(base){
-  try{ localStorage.setItem(BASE_KEY, JSON.stringify(base)); }catch(e){}
-}
-
 function startCloudSync(){
-  if(!cloudBase) cloudBase = loadSavedBase();
   metaRef.onSnapshot(function(snap){
     metaSeen = true;
     metaMissing = !snap.exists;
