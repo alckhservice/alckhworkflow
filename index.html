@@ -279,6 +279,9 @@
   .stat.complete .n{color:var(--pine);}
   .stat.progress .n{color:var(--amber);}
   .stat.notstarted .n{color:var(--rust);}
+  .stat.pkgs .n{font-size:17px; display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; line-height:1.15;}
+  .stat.pkgs .n span{white-space:nowrap; font-family:var(--mono); font-size:11px; color:var(--ink-soft);}
+  .stat.pkgs .n b{font-family:var(--serif); font-size:20px; color:var(--rust); font-weight:700; margin-left:2px;}
 
   .tablewrap{
     background:rgba(255,255,255,0.82);
@@ -290,7 +293,7 @@
     box-shadow:0 8px 30px rgba(40,50,48,0.08);
   }
   .tablescroll{overflow:auto; max-height:calc(70vh + 1cm);}
-  table{border-collapse:collapse; width:100%; min-width:1170px; table-layout:fixed;}
+  table{border-collapse:collapse; width:100%; min-width:1280px; table-layout:fixed;}
   thead{position:sticky; top:0; z-index:5; box-shadow:0 2px 6px rgba(40,50,48,0.08);}
   thead tr.grp th{
     font-family:var(--mono);
@@ -412,6 +415,9 @@
   .statusSel.done{background:var(--yellow); border-color:var(--yellow-deep); color:#3a2f00;}
   .statusSel.na{background:var(--brass); border-color:var(--brass-deep); color:#fff;}
   .statusSel:disabled{cursor:default; opacity:.8;}
+  .xSel{font-family:inherit; font-size:9.5px; padding:2px 2px; border-radius:5px; border:1.5px solid var(--line); background:var(--paper-raised); color:var(--ink); width:100%; box-sizing:border-box; cursor:pointer;}
+  .xSel.filled{background:var(--yellow-soft, #fbf3d0); border-color:var(--yellow-deep); color:#3a2f00;}
+  .xSel:disabled{cursor:default; opacity:.8;}
   .textSel{font-family:inherit; font-size:9px; padding:3px 2px; border-radius:5px; border:1.5px solid var(--line); background:var(--paper-raised); color:var(--ink); width:100%; box-sizing:border-box; text-align:center; text-overflow:ellipsis; cursor:text;}
   .textSel::placeholder{color:var(--ink-soft); opacity:.7;}
   .textSel:focus{outline:none; border-color:var(--brass); background:#fff; color:var(--ink); text-align:left;}
@@ -643,7 +649,7 @@
     <div class="stat"><div class="n" id="statTotal">0</div><div class="l">ACTIVE COMPANIES</div></div>
     <div class="stat complete"><div class="n" id="statComplete">0</div><div class="l" id="statCompleteLabel">FULLY DONE</div></div>
     <div class="stat progress"><div class="n" id="statProgress">0</div><div class="l">IN PROGRESS</div></div>
-    <div class="stat notstarted"><div class="n" id="statZero">0</div><div class="l">NOT STARTED</div></div>
+    <div class="stat pkgs" title="Active companies by service package"><div class="n"><span>Tax only <b id="statPkgTax">0</b></span><span>BK + Tax <b id="statPkgBK">0</b></span><span>BK + Tax + Waste <b id="statPkgWaste">0</b></span></div><div class="l">COMPANIES BY PACKAGE</div></div>
     <div class="stat progress" data-pending="pca" title="Double-click to see pending clients"><div class="n" id="statPendingPCA">0</div><div class="l">PCA PENDING</div></div>
     <div class="stat progress" data-pending="bk" title="Double-click to see pending clients"><div class="n" id="statPendingBK">0</div><div class="l">BK PENDING</div></div>
     <div class="stat progress" data-pending="tax" title="Double-click to see pending clients"><div class="n" id="statPendingTAX">0</div><div class="l">TAX PENDING</div></div>
@@ -693,7 +699,8 @@
     <div class="tablescroll">
     <table>
       <colgroup>
-        <col style="width:20%;">
+        <col style="width:15%;">
+        <col style="width:9.5%;">
         <col style="width:5.1%;">
         <col style="width:5.1%;">
         <col style="width:4.2%;">
@@ -706,10 +713,11 @@
         <col style="width:4.8%;">
         <col style="width:4.2%;">
         <col style="width:5%;">
+        <col style="width:5%;">
         <col style="width:4.6%;">
         <col style="width:4.6%;">
         <col style="width:4.8%;">
-        <col style="width:7%;">
+        <col style="width:6%;">
         <col style="width:4.3%;">
         <col style="width:4.3%;">
         <col style="width:3%;">
@@ -717,9 +725,10 @@
       <thead>
         <tr class="grp">
           <th class="first"></th>
+          <th></th>
           <th colspan="2">Client Progress</th>
           <th colspan="2">PCA</th>
-          <th colspan="8">BK</th>
+          <th colspan="9">BK</th>
           <th colspan="3">TAX</th>
           <th></th>
           <th colspan="2">Sign-off</th>
@@ -727,6 +736,7 @@
         </tr>
         <tr class="cols">
           <th class="name-h">Company <span class="sortBtn" id="sortAsc" title="Sort ascending (1→99)">&#9650;</span><span class="sortBtn" id="sortDesc" title="Sort descending (99→1)">&#9660;</span></th>
+          <th>Package</th>
           <th>Plan Finish</th>
           <th>Actual Finish Date</th>
           <th>Import</th>
@@ -739,6 +749,7 @@
           <th>Inventory<br>Adj</th>
           <th>Salary</th>
           <th>Bank<br>reconcile</th>
+          <th>Bank<br>report</th>
           <th>E-filing</th>
           <th>Separate<br>Bill</th>
           <th>Tax<br>Payment</th>
@@ -750,7 +761,7 @@
       </thead>
       <tbody id="tbody"></tbody>
       <tfoot>
-        <tr><td colspan="20"><button class="addrow-btn" id="btnAddRow2">+ add another company row</button></td></tr>
+        <tr><td colspan="22"><button class="addrow-btn" id="btnAddRow2">+ add another company row</button></td></tr>
       </tfoot>
     </table>
     </div>
@@ -1781,6 +1792,37 @@ const SIGNOFF_FILTERS = {review_by:'filterReview', confirmed_by:'filterConfirm'}
 function signoffFilterOn(){ return Object.keys(SIGNOFF_FILTERS).some(function(k){ return !!document.getElementById(SIGNOFF_FILTERS[k]).value; }); }
 function anyFilterOn(){ return document.getElementById('statusFilter').value !== 'all' || signoffFilterOn(); }
 
+// ---- Service package (per company) and Bank reconcile report status ----
+// Plain dropdowns, kept out of COLS so they never change progress %, the Excel export or the checklist.
+const PKG_OPTS = [
+  {v:'tax', l:'1. Tax'},
+  {v:'bk_tax', l:'2. BK + Tax'},
+  {v:'bk_tax_waste', l:'3. BK + Tax + Waste'},
+  {v:'bk_tax_4', l:'4. BK + Tax'}
+];
+const BANKRPT_OPTS = [{v:'sent', l:'1. Report sent'}, {v:'notsent', l:'2. Not yet sent'}];
+// Summary card groups: option 4 is counted under BK + Tax.
+const PKG_GROUP = {tax:'tax', bk_tax:'bk', bk_tax_4:'bk', bk_tax_waste:'waste'};
+function xSelect(opts, field, v, idx, locked, title){
+  let h = '<option value=""' + (!v ? ' selected' : '') + '>-</option>';
+  opts.forEach(function(o){ h += '<option value="' + o.v + '"' + (v === o.v ? ' selected' : '') + '>' + o.l + '</option>'; });
+  return '<select class="xSel' + (v ? ' filled' : '') + '" title="' + escapeAttr(title) + '" data-idx="' + idx + '" data-field="' + field + '" ' + (locked ? 'disabled' : '') + '>' + h + '</select>';
+}
+function pkgSelect(row, idx, locked){ return xSelect(PKG_OPTS, 'pkg', row.pkg || '', idx, locked, 'Service package'); }
+function bankRptSelect(row, idx, locked){ return xSelect(BANKRPT_OPTS, 'bank_report', row.bank_report || '', idx, locked, 'Bank reconcile report'); }
+// Summary card: active companies (stopped and leads excluded) counted by package.
+function updatePkgCounts(){
+  const n = {tax:0, bk:0, waste:0};
+  currentRows().forEach(function(row){
+    if(isOut(row)) return;
+    const g = PKG_GROUP[row.pkg];
+    if(g) n[g]++;
+  });
+  document.getElementById('statPkgTax').textContent = n.tax;
+  document.getElementById('statPkgBK').textContent = n.bk;
+  document.getElementById('statPkgWaste').textContent = n.waste;
+}
+
 function signoffSelect(c, v, idx, locked){
   v = v || '';
   return '<input type="text" class="textSel' + (v ? ' set' : '') + '" value="' + escapeAttr(v) + '" placeholder="-" autocomplete="off" spellcheck="false" title="' + escapeAttr(v || ('Type to search ' + c.label)) + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked ? 'disabled' : '') + '>';
@@ -2040,7 +2082,9 @@ function render(){
       const cls = pct >= 100 ? 'full' : (pct <= 0 ? 'zero' : 'mid');
       return '<td class="grouppct ' + cls + '">' + pct + '%</td>';
     }
+    tds += '<td>' + pkgSelect(row, idx, locked) + '</td>'; // Package sits right after Company
     COLS.forEach(c => {
+      if(c.key === 'efiling') tds += '<td>' + bankRptSelect(row, idx, locked) + '</td>'; // Bank report sits right after Bank reconcile
       // Handle new client progress fields (dates and percentage)
       if(c.key === 'plan_finish'){
         tds += '<td>' + getDateDropdown(row.plan_finish || '', idx, 'plan_finish', locked, row) + '</td>';
@@ -2079,7 +2123,6 @@ function render(){
   document.getElementById('statTotal').textContent = total;
   document.getElementById('statComplete').textContent = complete;
   document.getElementById('statProgress').textContent = inprog;
-  document.getElementById('statZero').textContent = zero;
   document.getElementById('statPendingPCA').textContent = pendingPCA;
   document.getElementById('statPendingBK').textContent = pendingBK;
   document.getElementById('statPendingTAX').textContent = pendingTAX;
@@ -2123,13 +2166,13 @@ function updateStats(){
   document.getElementById('statTotal').textContent = total;
   document.getElementById('statComplete').textContent = complete;
   document.getElementById('statProgress').textContent = inprog;
-  document.getElementById('statZero').textContent = zero;
   document.getElementById('statPendingPCA').textContent = pendingPCA;
   document.getElementById('statPendingBK').textContent = pendingBK;
   document.getElementById('statPendingTAX').textContent = pendingTAX;
   const overall = total ? Math.round((sumProg/total)*100) : 0;
   document.getElementById('overallPct').textContent = overall + '%';
   document.getElementById('ringProg').style.strokeDashoffset = 194.8 - (overall/100)*194.8;
+  updatePkgCounts();
   document.getElementById('statInOut').innerHTML = '<span class="in">+' + nIn + '</span><span class="out">&minus;' + nOut + '</span><span class="lead">' + nLead + ' lead' + (nLead === 1 ? '' : 's') + '</span>';
 }
 
@@ -2158,6 +2201,9 @@ function paintRowCells(idx, row){
       const want = v === 'na' ? 'na' : (v === true ? 'true' : 'false');
       if(el.value !== want) el.value = want;
       paintSelect(el, v, DROPDOWN_COLS[f]);
+    } else if(el.classList.contains('xSel')){
+      if(el.value !== (v || '')) el.value = v || '';
+      el.classList.toggle('filled', !!v);
     } else if(el.classList.contains('dateSelect')){
       if(el.value !== (v || '')) el.value = v || '';
       if(f === 'actual_finish') repaintFinish(idx, row);
@@ -2214,6 +2260,16 @@ function attachRowEvents(){
       const prev = currentRows()[idx][field];
       currentRows()[idx][field] = (el.value === 'na') ? 'na' : (el.value === 'true');
       refreshRow(el, idx, prev);
+    });
+  });
+  document.querySelectorAll('.xSel').forEach(function(el){
+    el.addEventListener('change', function(){
+      const idx = +el.dataset.idx, field = el.dataset.field, row = currentRows()[idx];
+      const prev = row[field];
+      if(el.value) row[field] = el.value; else delete row[field];
+      el.classList.toggle('filled', !!el.value);
+      if(field === 'pkg') updatePkgCounts();
+      saveCell(idx, field, prev);
     });
   });
   document.querySelectorAll('td.name input').forEach(function(el){
@@ -2293,6 +2349,7 @@ document.getElementById('btnNewMonth').addEventListener('click', function(){
     if(r.engaged_from) nr.engaged_from = r.engaged_from;
     if(r.stopped_from) nr.stopped_from = r.stopped_from;
     if(r.lead_from) nr.lead_from = r.lead_from;
+    if(r.pkg) nr.pkg = r.pkg; // service package stays; Bank report status starts blank each month
     SIGNOFF_COLS.forEach(function(c){ if(r[c.key]) nr[c.key] = r[c.key]; }); // person in charge stays until changed manually
     COLS.forEach(function(c){ nr[c.key] = (DROPDOWN_COLS[c.key] && DROPDOWN_COLS[c.key].pending) ? 'na' : false; });
     nr.plan_finish = r.plan_finish || ''; // Plan Finish stays until changed manually
