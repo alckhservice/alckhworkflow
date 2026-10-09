@@ -280,7 +280,7 @@
   .stat.progress .n{color:var(--amber);}
   .stat.notstarted .n{color:var(--rust);}
   .stat.pkgs .n{font-size:17px; display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; line-height:1.15;}
-  .stat.pkgs .n span{white-space:nowrap; font-family:var(--mono); font-size:11px; color:var(--ink-soft);}
+  .stat.pkgs .n span{cursor:pointer; white-space:nowrap; font-family:var(--mono); font-size:11px; color:var(--ink-soft);}
   .stat.pkgs .n b{font-family:var(--serif); font-size:20px; color:var(--rust); font-weight:700; margin-left:2px;}
 
   .tablewrap{
@@ -644,7 +644,7 @@
     <div class="stat"><div class="n" id="statTotal">0</div><div class="l">ACTIVE COMPANIES</div></div>
     <div class="stat complete"><div class="n" id="statComplete">0</div><div class="l" id="statCompleteLabel">FULLY DONE</div></div>
     <div class="stat progress"><div class="n" id="statProgress">0</div><div class="l">IN PROGRESS</div></div>
-    <div class="stat pkgs" title="Active companies by service package"><div class="n"><span>Tax only <b id="statPkgTax">0</b></span><span>BK + Tax <b id="statPkgBK">0</b></span><span>BK + Tax + Waste <b id="statPkgWaste">0</b></span></div><div class="l">COMPANIES BY PACKAGE</div></div>
+    <div class="stat pkgs" title="Active companies by service package"><div class="n"><span data-pkgf="tax" title="Click to show only these companies">Tax only <b id="statPkgTax">0</b></span><span data-pkgf="bk" title="Click to show only these companies">BK + Tax <b id="statPkgBK">0</b></span><span data-pkgf="waste" title="Click to show only these companies">BK + Tax + Waste <b id="statPkgWaste">0</b></span></div><div class="l">COMPANIES BY PACKAGE</div></div>
     <div class="stat progress" data-pending="pca" title="Double-click to see pending clients"><div class="n" id="statPendingPCA">0</div><div class="l">PCA PENDING</div></div>
     <div class="stat progress" data-pending="bk" title="Double-click to see pending clients"><div class="n" id="statPendingBK">0</div><div class="l">BK PENDING</div></div>
     <div class="stat progress" data-pending="tax" title="Double-click to see pending clients"><div class="n" id="statPendingTAX">0</div><div class="l">TAX PENDING</div></div>
@@ -673,6 +673,7 @@
       <option value="stopped">Stopped engaged</option>
       <option value="lead">Leads (not confirmed)</option>
     </select>
+    <select class="statusfilter signofffilter" id="filterPkg" title="Show only companies with this service package"><option value="">Package: all</option><option value="tax">Tax only</option><option value="bk">BK + Tax (incl. option 4)</option><option value="waste">BK + Tax + Waste</option><option value="__blank__">Package: (not set)</option></select>
     <select class="statusfilter signofffilter" id="filterReview" title="Show only companies reviewed by this person"><option value="">Reviewer: all</option></select>
     <select class="statusfilter signofffilter" id="filterConfirm" title="Show only companies confirmed by this person"><option value="">Confirmer: all</option></select>
     <select class="statusfilter" id="planFinishSort">
@@ -1792,7 +1793,7 @@ const SIGNOFF_FILTERS = {review_by:'filterReview', confirmed_by:'filterConfirm'}
   });
 })();
 function signoffFilterOn(){ return Object.keys(SIGNOFF_FILTERS).some(function(k){ return !!document.getElementById(SIGNOFF_FILTERS[k]).value; }); }
-function anyFilterOn(){ return document.getElementById('statusFilter').value !== 'all' || signoffFilterOn(); }
+function anyFilterOn(){ return document.getElementById('statusFilter').value !== 'all' || signoffFilterOn() || !!document.getElementById('filterPkg').value; }
 
 // ---- Service package (per company) and Bank reconcile report status ----
 // Plain dropdowns, kept out of COLS so they never change progress %, the Excel export or the checklist.
@@ -2271,6 +2272,7 @@ function attachRowEvents(){
       if(el.value) row[field] = el.value; else delete row[field];
       el.classList.toggle('filled', !!el.value);
       if(field === 'pkg') updatePkgCounts();
+      if(field === 'pkg' && document.getElementById('filterPkg').value){ renderView(); } // row may leave the filtered view
       saveCell(idx, field, prev);
     });
   });
@@ -2441,6 +2443,9 @@ function rowMatchesView(row){
   const filter = document.getElementById('statusFilter').value;
   const prog = rowProgress(row), stopped = isOut(row);
   if(search && !String(row.name || '').toLowerCase().includes(search)) return false;
+  const wantPkg = document.getElementById('filterPkg').value;
+  if(wantPkg === '__blank__' && PKG_GROUP[row.pkg]) return false;
+  if(wantPkg && wantPkg !== '__blank__' && PKG_GROUP[row.pkg] !== wantPkg) return false;
   for(const k in SIGNOFF_FILTERS){
     const want = document.getElementById(SIGNOFF_FILTERS[k]).value;
     if(want === '__blank__' && row[k]) return false;
@@ -2542,6 +2547,8 @@ document.getElementById('btnExport').addEventListener('click', function(){
   const parts = [];
   const f = document.getElementById('statusFilter').value;
   if(FILTER_NAMES[f]) parts.push(FILTER_NAMES[f]);
+  const pk = document.getElementById('filterPkg').value;
+  if(pk) parts.push({tax:'Tax only', bk:'BK + Tax', waste:'BK + Tax + Waste', __blank__:'Package not set'}[pk]);
   const rv = document.getElementById('filterReview').value, cf = document.getElementById('filterConfirm').value;
   if(rv) parts.push('Review ' + (rv === '__blank__' ? 'blank' : rv));
   if(cf) parts.push('Confirmed ' + (cf === '__blank__' ? 'blank' : cf));
@@ -2550,7 +2557,15 @@ document.getElementById('btnExport').addEventListener('click', function(){
 });
 document.getElementById('search').addEventListener('input', updateExportLabel);
 document.getElementById('statusFilter').addEventListener('change', updateExportLabel);
-['filterReview','filterConfirm'].forEach(function(id){ const el = document.getElementById(id); el.addEventListener('change', function(){ el.classList.toggle('on', !!el.value); renderView(); }); });
+document.querySelectorAll('[data-pkgf]').forEach(function(sp){
+  sp.addEventListener('click', function(){
+    const el = document.getElementById('filterPkg');
+    el.value = (el.value === sp.dataset.pkgf) ? '' : sp.dataset.pkgf; // click again to clear
+    el.classList.toggle('on', !!el.value);
+    renderView();
+  });
+});
+['filterPkg','filterReview','filterConfirm'].forEach(function(id){ const el = document.getElementById(id); el.addEventListener('change', function(){ el.classList.toggle('on', !!el.value); renderView(); }); });
 
 document.getElementById('btnClearAll').addEventListener('click', function(){
   if(isLocked()) return;
