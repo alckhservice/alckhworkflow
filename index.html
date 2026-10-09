@@ -585,7 +585,6 @@
   .lg-card button:disabled{opacity:.6;cursor:wait;}
   .lg-card button.lg-google{margin:0;background:#fff;color:var(--ink);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px;}
   .lg-card button.lg-google:hover{background:var(--paper);}
-  .lg-or{margin:16px 0 10px;font-family:var(--sans);font-size:12px;color:var(--ink-soft);}
   .lg-err{min-height:18px;margin-top:10px;font-size:13px;color:var(--rust);font-family:var(--sans);}
   #logoutBtn{margin-left:10px;background:none;border:1px solid var(--line);border-radius:var(--r-pill);
     padding:2px 10px;font:inherit;cursor:pointer;color:var(--ink-soft);}
@@ -598,10 +597,6 @@
     <h2>Team Login</h2>
     <p>Sign in with your Google account to open the report.</p>
     <button type="button" id="googleBtn" class="lg-google"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Sign in with Google</button>
-    <div class="lg-or">or use the team password</div>
-    <input type="text" name="username" value="ALCKH team" autocomplete="username" hidden>
-    <input type="password" id="loginPw" placeholder="Team password" autocomplete="current-password" required>
-    <button type="submit" id="loginBtn">Sign in</button>
     <div class="lg-err" id="loginErr"></div>
   </form>
 </div>
@@ -1359,7 +1354,7 @@ const WHO_KEY = IS_TEST_SITE ? 'alckh_wfr_test_user' : 'alckh_wfr_user';
 const logCol = db.collection(COLL_PREFIX + 'log');
 const editInfo = {};  // month -> company -> field -> {by, at}
 const myRecent = {};  // cellKey -> when this computer last changed that cell
-let staffName = '';      // the signed-in person's name from the staff list ('' = team password)
+let staffName = '';      // the signed-in person's name from the staff list
 let isAdminUser = false; // may manage the staff list
 const FIELD_NAMES = {name: 'Company name', stopped_from: 'Stopped from', engaged_from: 'Engaged from',
                      lead_from: 'Lead since', '(added)': 'Company added', '(removed)': 'Company removed',
@@ -1516,7 +1511,7 @@ document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeHi
 
 // ---- Staff list (who may sign in with Google) ----
 // Each staff member signs in with their own Google account. Only emails on this list get in.
-// Admins (the team password account, or staff marked Admin) can add and remove people.
+// Admins (staff marked Admin) can add and remove people.
 const staffCol = db.collection(COLL_PREFIX + 'staff');
 function openStaff(){
   document.getElementById('staffErr').textContent = '';
@@ -1537,9 +1532,14 @@ function loadStaff(){
            escapeAttr(r.email) + '">Remove</button></td></tr>';
     });
     document.getElementById('staffList').innerHTML = h + '</tbody></table>';
+    const admins = rows.filter(function(r){ return r.admin; }).length;
     document.querySelectorAll('#staffList .staff-del').forEach(function(b){
       b.addEventListener('click', function(){
         const email = b.dataset.email;
+        const r = rows.find(function(x){ return x.email === email; });
+        // Never leave the list without an admin: nobody could manage it from the app again.
+        if(email === myLoginEmail()){ document.getElementById('staffErr').textContent = 'You cannot remove yourself. Ask another admin.'; return; }
+        if(r && r.admin && admins <= 1){ document.getElementById('staffErr').textContent = 'This is the last admin. Add another admin first.'; return; }
         if(!confirm('Remove ' + email + '? They will no longer be able to sign in.')) return;
         staffCol.doc(email).delete().then(loadStaff).catch(function(err){
           document.getElementById('staffErr').textContent = 'Could not remove: ' + (err.code || err.message);
@@ -1550,6 +1550,7 @@ function loadStaff(){
     document.getElementById('staffList').innerHTML = '<div class="pm-empty">Could not load the staff list (' + pmEsc(err.code || '') + ').</div>';
   });
 }
+function myLoginEmail(){ const u = firebase.auth().currentUser; return u && u.email ? String(u.email).toLowerCase() : ''; }
 function addStaff(){
   const email = document.getElementById('staffEmail').value.trim().toLowerCase();
   const name = document.getElementById('staffName').value.trim();
@@ -1557,6 +1558,7 @@ function addStaff(){
   const err = document.getElementById('staffErr');
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ err.textContent = 'Enter a valid Google email address.'; return; }
   if(!name){ err.textContent = 'Enter the name to show for this person.'; return; }
+  if(email === myLoginEmail() && !admin){ err.textContent = 'Keep Admin ticked for your own account, or you would lose access to this list.'; return; }
   err.textContent = '';
   staffCol.doc(email).set({name: name, admin: admin, addedBy: whoLabel(), addedAt: serverTime()}).then(function(){
     document.getElementById('staffEmail').value = '';
@@ -2755,7 +2757,8 @@ document.getElementById('pmBody').addEventListener('click', function(e){
 const _pmOrigRender = render;
 render = function(){ _pmOrigRender.apply(this, arguments); if(pmCurrentGroup) pmRender(); markCells(); };
 
-// ---- Login: each person's Google account, or the shared team password (kept for now) ----
+// ---- Login: each person signs in with their own Google account (must be on the staff list) ----
+// The old shared team password is retired; a device still signed in with it is signed out.
 const TEAM_EMAIL = 'team@alckh-control-a868c.firebaseapp.com';
 let cloudStarted = false;
 function openApp(){
@@ -2770,7 +2773,11 @@ function loginError(text){
 }
 firebase.auth().onAuthStateChanged((user)=>{
   if(user){
-    if(user.email === TEAM_EMAIL){ staffName = ''; isAdminUser = true; openApp(); return; }
+    if(user.email === TEAM_EMAIL){
+      loginError('The team password no longer works. Please sign in with your own Google account.');
+      firebase.auth().signOut();
+      return;
+    }
     const email = String(user.email || '').toLowerCase();
     staffCol.doc(email).get().then(function(snap){
       if(!snap.exists){
@@ -2803,29 +2810,14 @@ document.getElementById('googleBtn').addEventListener('click', ()=>{
   firebase.auth().signInWithPopup(provider).catch((ex)=>{
     const c = ex && ex.code || '';
     if(c === 'auth/popup-blocked'){ firebase.auth().signInWithRedirect(provider); return; }
-    loginError(c === 'auth/operation-not-allowed' ? 'Google sign-in is not switched on yet — use the team password for now.'
+    loginError(c === 'auth/operation-not-allowed' ? 'Google sign-in is switched off in Firebase — ask your admin.'
       : c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request' ? ''
       : c === 'auth/unauthorized-domain' ? 'This web address is not allowed for Google sign-in yet (Firebase authorized domains).'
       : c.includes('network') ? 'No internet connection — please try again.'
       : 'Google sign-in failed (' + c + ').');
   });
 });
-document.getElementById('loginForm').addEventListener('submit', (e)=>{
-  e.preventDefault();
-  const pw = document.getElementById('loginPw');
-  const btn = document.getElementById('loginBtn');
-  const err = document.getElementById('loginErr');
-  err.textContent = ''; btn.disabled = true; btn.textContent = 'Signing in…';
-  firebase.auth().signInWithEmailAndPassword(TEAM_EMAIL, pw.value)
-    .catch((ex)=>{
-      const c = ex && ex.code || '';
-      err.textContent = (c.includes('network')) ? 'No internet connection — please try again.'
-        : (c.includes('too-many-requests')) ? 'Too many attempts. Wait a few minutes and try again.'
-        : 'Wrong password.';
-      pw.select();
-    })
-    .finally(()=>{ btn.disabled = false; btn.textContent = 'Sign in'; });
-});
+document.getElementById('loginForm').addEventListener('submit', (e)=>{ e.preventDefault(); });
 document.getElementById('logoutBtn').addEventListener('click', ()=>{
   if(confirm('Sign out on this device?')) firebase.auth().signOut();
 });

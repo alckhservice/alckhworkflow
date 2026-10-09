@@ -5,15 +5,11 @@ rules_version = '2';
 // (or paste into Firebase Console → Firestore Database → Rules → Publish)
 //
 // Two apps share this project:
-//   - ALCKH Working Flow Report (this repo) → team login required
+//   - ALCKH Working Flow Report (this repo) → each person signs in with Google and must be on the staff list
+//     (the old shared team password account no longer has any access)
 //   - alckh_kv                              → another ALCKH app; still open because it has no login yet
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isTeam() {
-      return request.auth != null
-        && request.auth.token.email == 'team@alckh-control-a868c.firebaseapp.com';
-    }
 
     // Staff who sign in with their own Google account: their email must be on the staff list
     // (<prefix>staff/<email>). Admins on that list may manage it.
@@ -31,43 +27,43 @@ service cloud.firestore {
 
     // Working Flow Report — current layout: one record per company per month, plus one settings record.
     match /wfr2_rows/{docId} {
-      allow read, write: if isTeam() || onStaffList('wfr2_staff');
+      allow read, write: if onStaffList('wfr2_staff');
     }
     match /wfr2_meta/{docId} {
-      allow read, write: if isTeam() || onStaffList('wfr2_staff');
+      allow read, write: if onStaffList('wfr2_staff');
     }
     // Change history: lines can be added and read, never changed or removed.
     match /wfr2_log/{docId} {
-      allow read, create: if isTeam() || onStaffList('wfr2_staff');
+      allow read, create: if onStaffList('wfr2_staff');
     }
     // Staff list: a person may read their own entry; admins manage the list.
     match /wfr2_staff/{email} {
-      allow get: if isTeam() || (request.auth != null && myEmail() == email) || staffAdmin('wfr2_staff');
-      allow list, write: if isTeam() || staffAdmin('wfr2_staff');
+      allow get: if (request.auth != null && myEmail() == email) || staffAdmin('wfr2_staff');
+      allow list, write: if staffAdmin('wfr2_staff');
     }
 
     // Working Flow Report — test-site copy (kept so the test copy keeps working; can be removed later).
     match /wfr_rows/{docId} {
-      allow read, write: if isTeam() || onStaffList('wfr_staff');
+      allow read, write: if onStaffList('wfr_staff');
     }
     match /wfr_meta/{docId} {
-      allow read, write: if isTeam() || onStaffList('wfr_staff');
+      allow read, write: if onStaffList('wfr_staff');
     }
     match /wfr_log/{docId} {
-      allow read, create: if isTeam() || onStaffList('wfr_staff');
+      allow read, create: if onStaffList('wfr_staff');
     }
     match /wfr_staff/{email} {
-      allow get: if isTeam() || (request.auth != null && myEmail() == email) || staffAdmin('wfr_staff');
-      allow list, write: if isTeam() || staffAdmin('wfr_staff');
+      allow get: if (request.auth != null && myEmail() == email) || staffAdmin('wfr_staff');
+      allow list, write: if staffAdmin('wfr_staff');
     }
 
-    // Working Flow Report — old single-document layout, kept so the one-time copy can read it.
+    // Working Flow Report — old single-document layout. Read-only, kept only so the one-time copy can read it.
     match /alckh_working_flow_report/{docId} {
-      allow read, write: if isTeam();
+      allow read: if onStaffList('wfr2_staff') || onStaffList('wfr_staff');
     }
 
     // Other ALCKH app — left open so it keeps working.
-    // TODO: add sign-in to that app, then change this to: if isTeam();
+    // TODO: add sign-in to that app, then close this.
     match /alckh_kv/{docId} {
       allow read, write: if true;
     }
