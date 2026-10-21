@@ -993,6 +993,20 @@
   .textSel.awaiting{box-shadow:var(--press-sm), 0 0 0 2px var(--warn); animation:rcPulse 1.8s ease-in-out infinite;}
   .textSel.awaiting::placeholder{color:var(--warn); opacity:1; font-weight:700;}
   @keyframes rcPulse{50%{box-shadow:var(--press-sm), 0 0 0 4px color-mix(in srgb, var(--warn) 30%, transparent);}}
+  .stat.revcard{grid-column:1 / -1; min-height:0; align-items:stretch;}
+  .rev-head{display:flex; align-items:baseline; gap:10px; margin-bottom:8px;}
+  .rev-head .l{margin:0;}
+  .rev-total{font-size:11.5px; color:var(--muted);}
+  .rev-list{display:flex; flex-wrap:wrap; gap:8px;}
+  .rev-chip{display:flex; align-items:center; gap:8px; border:none; cursor:pointer; font:inherit; font-size:12.5px; color:var(--ink2);
+    background:var(--neu-bg); box-shadow:var(--raise-sm); border-radius:99px; padding:5px 6px 5px 12px;}
+  .rev-chip b{min-width:26px; text-align:center; font-size:13px; padding:2px 8px; border-radius:99px; color:#fff; background:var(--warn);}
+  .rev-chip.zero b{background:var(--ok);}
+  .rev-chip.unassigned b{background:var(--muted);}
+  .rev-chip small{font-size:10.5px; color:var(--muted);}
+  .rev-chip:hover{box-shadow:var(--raise);}
+  .rev-chip.on{box-shadow:var(--press-sm), 0 0 0 2px var(--ring-soft); font-weight:600;}
+  @media print{ .stat.revcard{display:none;} }
   .stat.waiting{cursor:pointer;}
   .stat.waiting .n{color:var(--warn);}
   .stat.waiting.zero .n{color:var(--muted);}
@@ -1121,6 +1135,10 @@
     <div class="stat progress" data-pending="tax" title="Double-click to see pending clients"><div class="n" id="statPendingTAX">0</div><div class="l">TAX PENDING</div></div>
     <div class="stat inout" data-pending="inout" title="Double-click to see new, stopped and lead clients"><div class="n" id="statInOut"><span class="in">+0</span><span class="out">&minus;0</span></div><div class="l">NEW IN / STOPPED · LEADS</div></div>
     <div class="stat waiting zero" id="statWaitingCard" title="Reviewed and sent to the manager, not confirmed yet. Click to show only these companies."><div class="n" id="statWaiting">0</div><div class="l">WAITING FOR CONFIRM</div></div>
+    <div class="stat revcard" id="statReviewers" title="Companies each reviewer still has to finish this month (not fully done + signed off). Click a name to see them.">
+      <div class="rev-head"><span class="l">REVIEWER PENDING</span><span class="rev-total" id="revTotal"></span></div>
+      <div class="rev-list" id="revList"></div>
+    </div>
   </div>
 
 
@@ -3649,7 +3667,8 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
         {v:'__full', l:'Fully done + signed off', test:function(r){ return !isOut(r) && isFullyDone(r, rowProgress(r)); }},
         {v:'__100', l:'100% (tasks done)', test:function(r){ return rowProgress(r) >= 0.999; }},
         {v:'__mid', l:'In progress', test:function(r){ const p = rowProgress(r); return p > 0.001 && p < 0.999; }},
-        {v:'__0', l:'Not started (0%)', test:function(r){ return rowProgress(r) <= 0.001; }}
+        {v:'__0', l:'Not started (0%)', test:function(r){ return rowProgress(r) <= 0.001; }},
+        {v:'__open', l:'Not fully done yet', test:function(r){ return !isOut(r) && !isFullyDone(r, rowProgress(r)); }}
       ];
     }
     if(key === 'review_check'){
@@ -3844,6 +3863,41 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
     }
   }
 
+  // ---- Reviewer pending card: per reviewer, active companies not fully done + signed off ----
+  function paintReviewers(){
+    const rows = currentRows().filter(function(r){ return !isOut(r); });
+    const names = SIGNOFF_COLS[0].options.slice();
+    rows.forEach(function(r){ if(r.review_by && names.indexOf(r.review_by) < 0) names.push(r.review_by); });
+    const cf = window.colFilters || {};
+    let totalLeft = 0;
+    const items = names.map(function(n){
+      const mine = rows.filter(function(r){ return r.review_by === n; });
+      const left = mine.filter(function(r){ return !isFullyDone(r, rowProgress(r)); });
+      const wait = left.filter(isWaitingConfirm).length;
+      totalLeft += left.length;
+      return {n: n, key: '=' + n, all: mine.length, left: left.length, wait: wait};
+    }).sort(function(a, b){ return b.left - a.left || b.all - a.all; });
+    const un = rows.filter(function(r){ return !r.review_by; }).length;
+    let h = '';
+    items.forEach(function(it){
+      const on = cf.review_by === it.key && cf.progress === '__open';
+      h += '<button type="button" class="rev-chip' + (it.left ? '' : ' zero') + (on ? ' on' : '') + '" data-rev="' + escapeAttr(it.key) + '" title="' +
+        escapeAttr(it.n + ': ' + it.left + ' remaining of ' + it.all + ' assigned' + (it.wait ? ', ' + it.wait + ' waiting for the manager' : '')) + '">' +
+        pmEsc(it.n) + (it.wait ? ' <small>' + it.wait + ' waiting</small>' : '') + '<b>' + it.left + '</b></button>';
+    });
+    const onUn = cf.review_by === '__blank' && cf.progress === '__open';
+    h += '<button type="button" class="rev-chip unassigned' + (onUn ? ' on' : '') + '" data-rev="__blank" title="Active companies with no Review By picked yet">Not assigned<b>' + un + '</b></button>';
+    $('revList').innerHTML = h;
+    $('revTotal').textContent = totalLeft + ' remaining with a reviewer · ' + un + ' not assigned';
+  }
+  $('revList').addEventListener('click', function(e){
+    const b = e.target.closest('.rev-chip'); if(!b) return;
+    const cf = window.colFilters; if(!cf) return;
+    if(cf.review_by === b.dataset.rev && cf.progress === '__open'){ delete cf.review_by; delete cf.progress; }
+    else { cf.review_by = b.dataset.rev; cf.progress = '__open'; }
+    renderView();
+  });
+
   // Card click: show / hide only the companies waiting for confirmation.
   $('statWaitingCard').addEventListener('click', function(){
     const cf = window.colFilters; if(!cf) return;
@@ -3865,15 +3919,15 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
   soCommit = function(el, val){
     _commit(el, val);
     const idx = +el.dataset.idx, row = currentRows()[idx];
-    if(row && el.dataset.field === 'confirmed_by'){ paintRow(idx, row); updateStats(); }
+    if(row && (el.dataset.field === 'confirmed_by' || el.dataset.field === 'review_by')){ paintRow(idx, row); updateStats(); }
   };
   const _cells = paintRowCells;
   paintRowCells = function(idx, row){ const tr = _cells(idx, row); paintRow(idx, row); return tr; };
   const _stats = updateStats;
-  updateStats = function(){ _stats.apply(this, arguments); paintCard(); };
+  updateStats = function(){ _stats.apply(this, arguments); paintCard(); paintReviewers(); };
   const _render = render;
-  render = function(){ _render.apply(this, arguments); paintAll(); paintCard(); };
-  paintCard();
+  render = function(){ _render.apply(this, arguments); paintAll(); paintCard(); paintReviewers(); };
+  paintCard(); paintReviewers();
 })();
 </script>
 <script>
