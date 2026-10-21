@@ -998,7 +998,7 @@
   .rev-head .l{margin:0;}
   .rev-chip b{white-space:nowrap;}
   .rev-total{font-size:10.5px; color:var(--muted); white-space:nowrap;}
-  .rev-list{display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:3px 6px;}
+  .rev-list{display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:2px 10px;}
   .rev-chip{display:flex; align-items:center; gap:4px; min-width:0; border:none; cursor:pointer; font:inherit; font-size:11px; color:var(--ink2);
     background:transparent; border-radius:99px; padding:2px 2px 2px 6px; text-align:left;}
   .rev-chip span{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
@@ -1007,7 +1007,7 @@
   .rev-chip.unassigned b{background:var(--muted);}
   .rev-chip small{font-size:10px; font-weight:700; color:var(--warn);}
   .rev-chip b em{font-style:normal;}
-  .rev-chip b i{font-style:normal; font-weight:500; opacity:.85; font-size:10px;}
+  .rev-chip > i{font-style:normal; font-size:10.5px; color:var(--muted); white-space:nowrap; min-width:46px; text-align:right;}
   .rev-total em{font-style:normal; font-weight:700; color:var(--warn);}
   .rev-chip:hover{box-shadow:var(--raise-sm);}
   .rev-chip.on{box-shadow:var(--press-sm), 0 0 0 2px var(--ring-soft); font-weight:600;}
@@ -3997,12 +3997,12 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
                   it.wait + ' waiting for the manager · ' + it.conf + ' confirmed';
       h += '<button type="button" class="rev-chip' + (it.pend ? '' : ' zero') + (on ? ' on' : '') + '" data-rev="' + escapeAttr(it.key) + '" title="' + escapeAttr(tip) + '">' +
         '<span>' + pmEsc(String(it.n).replace(/^(mrs?|ms)\.?\s+/i, '')) + '</span>' +
-        '<b><em>' + it.pend + '</em><i>/' + it.all + '</i></b></button>';
+        '<b><em>' + it.pend + ' left</em></b><i>' + it.all + ' total</i></button>';
     });
     const onUn = cf.review_by === '__blank' && cf.review_check === '__notrev';
-    h += '<button type="button" class="rev-chip unassigned' + (onUn ? ' on' : '') + '" data-rev="__blank" title="Active companies with no Review By picked yet"><span>No reviewer</span><b><em>' + un + '</em></b></button>';
+    h += '<button type="button" class="rev-chip unassigned' + (onUn ? ' on' : '') + '" data-rev="__blank" title="Active companies with no Review By picked yet"><span>No reviewer</span><b><em>' + un + '</em></b><i>companies</i></button>';
     $('revList').innerHTML = h;
-    $('revTotal').innerHTML = '<em>' + totPend + '</em> not yet reviewed / ' + totAll;
+    $('revTotal').innerHTML = '<em>' + totPend + ' left</em> · ' + totAll + ' total';
     $('revTotal').title = totPend + ' not yet reviewed out of ' + totAll + ' companies with a reviewer · ' + un + ' with no reviewer';
   }
   $('revList').addEventListener('click', function(e){
