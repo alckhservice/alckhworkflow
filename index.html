@@ -985,6 +985,19 @@
   .cf-opt.warn b{color:var(--warn);}
   .cf-sep{height:1px; background:var(--line); margin:4px 6px;}
   @media print{ .cf-btn, .cf-menu{display:none !important;} thead tr.cols th.cf-th{padding-bottom:6px;} }
+  /* Send to Manager + waiting for confirm */
+  .xSel.rcSel{font-weight:600;}
+  .xSel.rcSel.rc-ready{background:color-mix(in srgb, var(--warn) 20%, var(--neu-bg)); color:var(--warn);}
+  .xSel.rcSel.rc-returned{background:color-mix(in srgb, var(--bad) 16%, var(--neu-bg)); color:var(--bad);}
+  .xSel.rcSel.rc-done{background:color-mix(in srgb, var(--ok) 16%, var(--neu-bg)); color:var(--ok);}
+  .textSel.awaiting{box-shadow:var(--press-sm), 0 0 0 2px var(--warn); animation:rcPulse 1.8s ease-in-out infinite;}
+  .textSel.awaiting::placeholder{color:var(--warn); opacity:1; font-weight:700;}
+  @keyframes rcPulse{50%{box-shadow:var(--press-sm), 0 0 0 4px color-mix(in srgb, var(--warn) 30%, transparent);}}
+  .stat.waiting{cursor:pointer;}
+  .stat.waiting .n{color:var(--warn);}
+  .stat.waiting.zero .n{color:var(--muted);}
+  .stat.waiting.on{box-shadow:var(--press-sm), 0 0 0 2px var(--ring-soft);}
+  @media print{ .textSel.awaiting{animation:none; box-shadow:none;} .stat.waiting{display:none;} }
   /* Theme colour picker */
   .sb-row{display:flex; gap:10px; align-items:center;}
   .sb-row .sb-neon{flex:1; width:auto;}
@@ -1107,6 +1120,7 @@
     <div class="stat progress" data-pending="bk" title="Double-click to see pending clients"><div class="n" id="statPendingBK">0</div><div class="l">BK PENDING</div></div>
     <div class="stat progress" data-pending="tax" title="Double-click to see pending clients"><div class="n" id="statPendingTAX">0</div><div class="l">TAX PENDING</div></div>
     <div class="stat inout" data-pending="inout" title="Double-click to see new, stopped and lead clients"><div class="n" id="statInOut"><span class="in">+0</span><span class="out">&minus;0</span></div><div class="l">NEW IN / STOPPED · LEADS</div></div>
+    <div class="stat waiting zero" id="statWaitingCard" title="Reviewed and sent to the manager, not confirmed yet. Click to show only these companies."><div class="n" id="statWaiting">0</div><div class="l">WAITING FOR CONFIRM</div></div>
   </div>
 
 
@@ -1174,8 +1188,8 @@
     <div class="tablescroll">
     <table>
       <colgroup>
-        <col style="width:15%;">
-        <col style="width:9.5%;">
+        <col style="width:13.6%;">
+        <col style="width:8.6%;">
         <col style="width:5.1%;">
         <col style="width:5.1%;">
         <col style="width:4.2%;">
@@ -1194,6 +1208,7 @@
         <col style="width:4.8%;">
         <col style="width:6%;">
         <col style="width:4.3%;">
+        <col style="width:4.6%;">
         <col style="width:4.3%;">
         <col style="width:3%;">
       </colgroup>
@@ -1206,7 +1221,7 @@
           <th colspan="9"><span>BK</span></th>
           <th colspan="3"><span>TAX</span></th>
           <th></th>
-          <th colspan="2"><span>Sign-off</span></th>
+          <th colspan="3"><span>Sign-off</span></th>
           <th></th>
         </tr>
         <tr class="cols">
@@ -1230,13 +1245,14 @@
           <th>Tax<br>Payment</th>
           <th class="prog-h">Progress</th>
           <th class="signoff-h">Review<br>By</th>
+          <th class="signoff-h" title="Reviewer marks Ready so the manager knows to confirm">Send to<br>Manager</th>
           <th class="signoff-h">Confirmed<br>By</th>
           <th></th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
       <tfoot>
-        <tr><td colspan="22"><button class="addrow-btn" id="btnAddRow2">+ add another company row</button></td></tr>
+        <tr><td colspan="23"><button class="addrow-btn" id="btnAddRow2">+ add another company row</button></td></tr>
       </tfoot>
     </table>
     </div>
@@ -1465,7 +1481,7 @@ function runOneTimeFixes(){
   if(!state || !state.order) return;
   const done = state.fixes || {};
   const todo = [
-    {flag:'signoffCarry1', keys: SIGNOFF_COLS.map(function(c){ return c.key; })},
+    {flag:'signoffCarry1', keys: ['review_by', 'confirmed_by']},
     {flag:'planFinishCarry1', keys: ['plan_finish']}
   ].filter(function(f){ return !done[f.flag]; });
   if(!todo.length) return;
@@ -1838,7 +1854,7 @@ const myRecent = {};  // cellKey -> when this computer last changed that cell
 let staffName = '';      // the signed-in person's name from the staff list
 let isAdminUser = false; // may manage the staff list
 const FIELD_NAMES = {name: 'Company name', stopped_from: 'Stopped from', engaged_from: 'Engaged from',
-                     lead_from: 'Lead since', '(added)': 'Company added', '(removed)': 'Company removed',
+                     lead_from: 'Lead since', review_check: 'Send to Manager', '(added)': 'Company added', '(removed)': 'Company removed',
                      months: 'Month list', locked: 'Past month editing'};
 function currentUser(){ try{ return localStorage.getItem(WHO_KEY) || ''; }catch(e){ return ''; } }
 function whoLabel(){ return staffName || currentUser() || 'Unknown'; }
@@ -1849,6 +1865,7 @@ function fieldLabel(f){
 }
 function fmtVal(f, v){
   if(v === undefined || v === null || v === '') return '—';
+  if(f === 'review_check') return ({ready:'Ready – sent to manager', returned:'Returned – needs fixing'})[v] || String(v);
   const d = DROPDOWN_COLS[f];
   if(d) return valLabel(f, v);
   if(typeof v === 'boolean') return v ? 'Done' : '—';
@@ -2343,6 +2360,26 @@ function updatePkgCounts(){
   document.getElementById('statPkgWaste').textContent = n.waste;
 }
 
+// "Send to Manager": the reviewer marks the month Ready so the manager knows to review it and fill in
+// Confirmed By. Starts as "Not yet" every month. Not a task: never changes progress %.
+const RC_OPTS = [{v:'ready', l:'Ready', t:'Ready – sent to the manager to confirm'},
+                 {v:'returned', l:'Return', t:'Returned by the manager – needs fixing'}];
+function rcState(row){
+  if(row.review_check === 'ready') return row.confirmed_by ? 'done' : 'ready';
+  return row.review_check === 'returned' ? 'returned' : 'none';
+}
+function isWaitingConfirm(row){ return row.review_check === 'ready' && !row.confirmed_by && !isOut(row); }
+function rcTitle(row){
+  const st = rcState(row);
+  return st === 'done' ? 'Confirmed by ' + row.confirmed_by : st === 'ready' ? 'Waiting for the manager to confirm'
+       : st === 'returned' ? 'Returned by the manager – fix, then set Ready again' : 'Not sent to the manager yet';
+}
+function reviewCheckSelect(row, idx, locked){
+  const v = row.review_check || '';
+  let h = '<option value=""' + (!v ? ' selected' : '') + '>-</option>';
+  RC_OPTS.forEach(function(o){ h += '<option value="' + o.v + '" title="' + escapeAttr(o.t) + '"' + (v === o.v ? ' selected' : '') + '>' + o.l + '</option>'; });
+  return '<select class="xSel rcSel rc-' + rcState(row) + (v ? ' filled' : '') + '" title="' + escapeAttr(rcTitle(row)) + '" data-idx="' + idx + '" data-field="review_check" ' + (locked ? 'disabled' : '') + '>' + h + '</select>';
+}
 function signoffSelect(c, v, idx, locked){
   v = v || '';
   return '<input type="text" class="textSel' + (v ? ' set' : '') + '" value="' + escapeAttr(v) + '" placeholder="-" autocomplete="off" spellcheck="false" title="' + escapeAttr(v || ('Type to search ' + c.label)) + '" data-idx="' + idx + '" data-field="' + c.key + '" ' + (locked ? 'disabled' : '') + '>';
@@ -2391,7 +2428,7 @@ function soCommit(el, val){
   const prev = row[field];
   row[field] = val;
   saveCell(idx, field, prev);
-  if(signoffFilterOn()) setTimeout(renderView, 0);
+  if(anyFilterOn()) setTimeout(renderView, 0);
 }
 function soBind(el){
   el.dataset.saved = el.value;
@@ -2624,7 +2661,9 @@ function render(){
     if(lead) tds += '<td class="prog"><span class="lead-tag" title="Lead registered in ' + escapeAttr(row.lead_from) + '">Lead &middot; not confirmed</span></td>';
     else if(stopped) tds += '<td class="prog"><span class="stopped-tag" title="Stopped engaged from ' + escapeAttr(row.stopped_from) + '">Stopped from ' + escapeAttr(shortMonth(row.stopped_from)) + '</span></td>';
     else tds += '<td class="prog"><div class="progcell"><div class="bar"><span style="width:' + pctDisplay + '%"></span></div><span class="pct">' + pctDisplay + '%</span></div></td>';
-    SIGNOFF_COLS.forEach(function(c){ tds += '<td>' + signoffSelect(c, row[c.key], idx, locked) + '</td>'; });
+    tds += '<td>' + signoffSelect(SIGNOFF_COLS[0], row.review_by, idx, locked) + '</td>';
+    tds += '<td>' + reviewCheckSelect(row, idx, locked) + '</td>';
+    tds += '<td>' + signoffSelect(SIGNOFF_COLS[1], row.confirmed_by, idx, locked) + '</td>';
     const toggle = pageLocked ? '' : lead
       ? '<span class="eng-toggle" data-idx="' + idx + '" data-confirm="1" title="Confirm as new client engaged in ' + escapeAttr(state.current) + '">&#10004;</span>'
       : (stopped
@@ -2855,7 +2894,7 @@ document.getElementById('btnRenameMonth').addEventListener('click', function(){
 
 document.getElementById('btnNewMonth').addEventListener('click', function(){
   const suggested = nextMonthGuess(state.order[state.order.length-1]);
-  const name = prompt('Name the new month (same company list, Plan Finish and Review By / Confirmed By kept; tasks and Actual Finish Date cleared):', suggested);
+  const name = prompt('Name the new month (same company list, Plan Finish and Review By kept; tasks, Actual Finish Date, Send to Manager and Confirmed By start blank):', suggested);
   if(!name || !name.trim()) return;
   const clean = name.trim();
   if(!isValidMonthLabel(clean)){ alert('Use the month name and year, for example "October 2026".'); return; }
@@ -2867,7 +2906,8 @@ document.getElementById('btnNewMonth').addEventListener('click', function(){
     if(r.stopped_from) nr.stopped_from = r.stopped_from;
     if(r.lead_from) nr.lead_from = r.lead_from;
     if(r.pkg) nr.pkg = r.pkg; // service package stays; Bank report status starts blank each month
-    SIGNOFF_COLS.forEach(function(c){ if(r[c.key]) nr[c.key] = r[c.key]; }); // person in charge stays until changed manually
+    if(r.review_by) nr.review_by = r.review_by; // reviewer in charge stays until changed manually
+    // Send to Manager and Confirmed By are signed off again every month, so they start blank
     COLS.forEach(function(c){ nr[c.key] = (DROPDOWN_COLS[c.key] && DROPDOWN_COLS[c.key].pending) ? 'na' : false; });
     nr.plan_finish = r.plan_finish || ''; // Plan Finish stays until changed manually
     nr.actual_finish = '';                // Actual Finish Date starts blank each month
@@ -3020,7 +3060,7 @@ function exportSchedule(rows, opts){
   aoa.push([]);
   const HDR = aoa.length; // group-header row; the column-header row follows it
   aoa.push(['Company','PCA',null,null,'BK',null,null,null,null,null,null,null,null,'TAX',null,null,null,'Progess']);
-  aoa.push([null,'Import','Export','PCA %','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','BK %','E-filling','Separate Bill','Tax Payment','TAX %',null,'Plan Finish','Actual Finish Date','Review By','Confirmed By','Engagement'].concat(opts.extra ? [opts.extra.label] : []));
+  aoa.push([null,'Import','Export','PCA %','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','BK %','E-filling','Separate Bill','Tax Payment','TAX %',null,'Plan Finish','Actual Finish Date','Review By','Confirmed By','Engagement','Send to Manager'].concat(opts.extra ? [opts.extra.label] : []));
   rows.forEach(function(row, ri){
     const line = [row.name];
     TASK_COLS.forEach(function(c){
@@ -3032,7 +3072,7 @@ function exportSchedule(rows, opts){
       else if(c.key === 'tax_payment') line.push(Math.round(groupProgress(row, GROUPS.tax)*10000)/10000);
     });
     line.push(Math.round(rowProgress(row)*10000)/10000);
-    line.push(row.plan_finish || '', row.actual_finish || '', row.review_by || '', row.confirmed_by || '', engagementText(row));
+    line.push(row.plan_finish || '', row.actual_finish || '', row.review_by || '', row.confirmed_by || '', engagementText(row), fmtVal('review_check', row.review_check).replace('—', ''));
     if(opts.extra) line.push(opts.extra.values[ri] || '');
     aoa.push(line);
   });
@@ -3045,7 +3085,7 @@ function exportSchedule(rows, opts){
     {s:{r:HDR,c:13},e:{r:HDR,c:16}}
   ];
   const oc = ws[XLSX.utils.encode_cell({r:3, c:11})]; if(oc) oc.z = '0%';
-  ws['!cols'] = [{wch:52}].concat(new Array(16).fill({wch:11})).concat([{wch:10},{wch:13},{wch:16},{wch:14},{wch:14},{wch:34}]).concat(opts.extra ? [{wch:50}] : []);
+  ws['!cols'] = [{wch:52}].concat(new Array(16).fill({wch:11})).concat([{wch:10},{wch:13},{wch:16},{wch:14},{wch:14},{wch:34},{wch:22}]).concat(opts.extra ? [{wch:50}] : []);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, state.current.slice(0,31) || 'Schedule');
   const fname = ('ALCKH_' + state.current + (opts.suffix ? ' ' + opts.suffix : '')).replace(/[^a-z0-9 _-]/gi,'') + '.xlsx';
@@ -3104,8 +3144,9 @@ document.getElementById('fileInput').addEventListener('change', function(e){
       const ws = wb.Sheets[sheetName];
       const aoa = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
       const newRows = [];
-      let start = 4; // older files: headers on rows 3-4
-      for(let h = 0; h < Math.min(aoa.length, 15); h++){ const l = aoa[h] || []; if(l[1] === 'Import' && l[2] === 'Export'){ start = h + 1; break; } }
+      let start = 4, hdrLine = []; // older files: headers on rows 3-4
+      for(let h = 0; h < Math.min(aoa.length, 15); h++){ const l = aoa[h] || []; if(l[1] === 'Import' && l[2] === 'Export'){ start = h + 1; hdrLine = l; break; } }
+      const rcCol = hdrLine.indexOf('Send to Manager'); // only in files exported after this column was added
       for(let r=start; r<aoa.length; r++){
         const line = aoa[r];
         if(!line || !line[0]) continue;
@@ -3136,6 +3177,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
         if((em = eng.match(/stopped engaged from\s+(.+)/i))) row.stopped_from = em[1].trim();
         else if((em = eng.match(/new engaged(?:\s+in)?\s+(.+)/i))) row.engaged_from = em[1].trim();
         else if((em = eng.match(/lead \(not confirmed\) since\s+(.+)/i))) row.lead_from = em[1].trim();
+        if(rcCol > 0){ const rc = String(line[rcCol] || '').toLowerCase(); if(rc.indexOf('ready') === 0) row.review_check = 'ready'; else if(rc.indexOf('return') === 0) row.review_check = 'returned'; }
         newRows.push(row);
       }
       if(newRows.length === 0){
@@ -3557,13 +3599,17 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
   const $ = function(id){ return document.getElementById(id); };
   // Column order of the table header row.
   const HEAD_KEYS = [null, 'pkg', 'plan_finish', 'actual_finish', 'import_', 'export', 'gp1', 'gp2', 'vat0', 'fa', 'sales0cmt', 'invadj',
-                     'salary', 'bankrec', 'bank_report', 'efiling', 'bill_sent', 'tax_payment', null, null, null, null];
+                     'salary', 'bankrec', 'bank_report', 'efiling', 'bill_sent', 'tax_payment',
+                     'progress', 'review_by', 'review_check', 'confirmed_by', null];
   const colFilters = {};   // key -> option value
   window.colFilters = colFilters;
 
   function label(key){
     if(key === 'pkg') return 'Package';
     if(key === 'bank_report') return 'Bank report';
+    if(key === 'progress') return 'Progress';
+    if(key === 'review_check') return 'Send to Manager';
+    const so = SIGNOFF_COLS.find(function(x){ return x.key === key; }); if(so) return so.label;
     const c = COLS.find(function(x){ return x.key === key; });
     return c ? c.label : key;
   }
@@ -3583,6 +3629,32 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
       const opts = key === 'pkg' ? PKG_OPTS : BANKRPT_OPTS;
       return opts.map(function(o){ return {v:o.v, l:o.l, test:function(r){ return r[key] === o.v; }}; })
         .concat([{v:'__blank', l:'(not set)', test:function(r){ return !r[key]; }}]);
+    }
+    if(key === 'progress'){
+      return [
+        {v:'__full', l:'Fully done + signed off', test:function(r){ return !isOut(r) && isFullyDone(r, rowProgress(r)); }},
+        {v:'__100', l:'100% (tasks done)', test:function(r){ return rowProgress(r) >= 0.999; }},
+        {v:'__mid', l:'In progress', test:function(r){ const p = rowProgress(r); return p > 0.001 && p < 0.999; }},
+        {v:'__0', l:'Not started (0%)', test:function(r){ return rowProgress(r) <= 0.001; }}
+      ];
+    }
+    if(key === 'review_check'){
+      return [
+        {v:'__waiting', l:'Waiting for manager', test:isWaitingConfirm},
+        {v:'__none', l:'Not yet sent', test:function(r){ return !r.review_check; }},
+        {v:'ready', l:'Ready (all)', test:function(r){ return r.review_check === 'ready'; }},
+        {v:'returned', l:'Returned – needs fixing', test:function(r){ return r.review_check === 'returned'; }},
+        {v:'__confirmed', l:'Confirmed', test:function(r){ return !!r.confirmed_by; }}
+      ];
+    }
+    const so = SIGNOFF_COLS.find(function(x){ return x.key === key; });
+    if(so){
+      // Known names first, then any other name found in this month's data.
+      const names = so.options.slice();
+      currentRows().forEach(function(r){ if(r[key] && names.indexOf(r[key]) < 0) names.push(r[key]); });
+      return [{v:'__blank', l:'(blank) – not yet', test:function(r){ return !r[key]; }},
+              {v:'__any', l:'(any name)', test:function(r){ return !!r[key]; }}]
+        .concat(names.map(function(n){ return {v:'=' + n, l:n, test:function(r){ return r[key] === n; }}; }));
     }
     // Plan / actual finish dates
     const list = [
@@ -3629,9 +3701,9 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
     h += '<button type="button" class="cf-opt' + (!colFilters[key] ? ' on' : '') + '" data-v=""><span>Show all</span></button>';
     options(key).forEach(function(o, i){
       const n = rows.filter(o.test).length;
-      if(i === 2 && DROPDOWN_COLS[key]) h += '<div class="cf-sep"></div>';
-      const tone = o.v === '__done' ? ' good' : (o.v === '__left' ? ' warn' : '');
-      h += '<button type="button" class="cf-opt' + tone + (colFilters[key] === o.v ? ' on' : '') + '" data-v="' + o.v + '"><span>' + o.l.replace(/</g,'&lt;') + '</span><b>' + n + '</b></button>';
+      if(i === 2 && (DROPDOWN_COLS[key] || SIGNOFF_COLS.some(function(c){ return c.key === key; }))) h += '<div class="cf-sep"></div>';
+      const tone = (o.v === '__done' || o.v === '__full' || o.v === '__confirmed') ? ' good' : ((o.v === '__left' || o.v === '__waiting' || o.v === 'returned') ? ' warn' : '');
+      h += '<button type="button" class="cf-opt' + tone + (colFilters[key] === o.v ? ' on' : '') + '" data-v="' + escapeAttr(o.v) + '"><span>' + o.l.replace(/</g,'&lt;') + '</span><b>' + n + '</b></button>';
     });
     menu.innerHTML = h;
     menu.hidden = false;
@@ -3698,6 +3770,96 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
   const _render = render;
   render = function(){ _render.apply(this, arguments); paint(); };
   paint();
+})();
+</script>
+<script>
+// ---- Send to Manager: reviewer marks a month Ready, the manager confirms ----
+// Ready + no Confirmed By  -> Confirmed By cell pulses, counted on the "Waiting for confirm" card.
+// Managers (names in the Confirmed By list) get a corner notice when new companies become ready.
+(function(){
+  const $ = function(id){ return document.getElementById(id); };
+  const MGR = SIGNOFF_COLS[1].options;
+  const mine = {};          // "month|company" this computer set to Ready (no notice for your own change)
+  let seen = null;          // {month, names:Set} waiting companies already known on this computer
+
+  function isManager(){
+    const who = soNorm(whoLabel());
+    return MGR.some(function(o){ const n = soNorm(o); return n && (who === n || who.indexOf(n) >= 0); });
+  }
+  function paintRow(idx, row){
+    const sel = document.querySelector('#tbody select.rcSel[data-idx="' + idx + '"]');
+    if(sel){
+      sel.classList.remove('rc-none', 'rc-ready', 'rc-returned', 'rc-done');
+      sel.classList.add('rc-' + rcState(row));
+      sel.title = rcTitle(row);
+    }
+    const conf = document.querySelector('#tbody .textSel[data-field="confirmed_by"][data-idx="' + idx + '"]');
+    if(conf){
+      const w = isWaitingConfirm(row);
+      conf.classList.toggle('awaiting', w);
+      conf.placeholder = w ? 'Confirm' : '-';
+    }
+  }
+  function paintAll(){ currentRows().forEach(function(r, i){ paintRow(i, r); }); }
+
+  function paintCard(){
+    const rows = currentRows().filter(isWaitingConfirm);
+    $('statWaiting').textContent = rows.length;
+    const card = $('statWaitingCard');
+    card.classList.toggle('zero', !rows.length);
+    card.classList.toggle('on', window.colFilters && window.colFilters.review_check === '__waiting');
+    notify(rows);
+  }
+  function notify(rows){
+    if(typeof rowsSeen === 'undefined' || !rowsSeen) return; // wait for the team's data before comparing
+    const names = new Set(rows.map(function(r){ return r.name; }));
+    if(!seen || seen.month !== state.current){
+      // First look at this month: tell a manager once if work is already waiting.
+      const first = !seen;
+      seen = {month: state.current, names: names};
+      if(first && names.size && isManager()) showNotice('<b>' + names.size + '</b> compan' + (names.size === 1 ? 'y is' : 'ies are') +
+        ' waiting for your confirmation in ' + pmEsc(state.current) + '. Click the <b>Waiting for confirm</b> card to see them.');
+      return;
+    }
+    const fresh = [];
+    names.forEach(function(n){ if(!seen.names.has(n) && !mine[state.current + '|' + n]) fresh.push(n); });
+    seen.names = names;
+    if(fresh.length && isManager()){
+      showNotice('Ready for you to confirm:<br>' + fresh.slice(0, 5).map(function(n){ return '<b>' + pmEsc(n) + '</b>'; }).join('<br>') +
+        (fresh.length > 5 ? '<br>… and ' + (fresh.length - 5) + ' more' : ''));
+    }
+  }
+
+  // Card click: show / hide only the companies waiting for confirmation.
+  $('statWaitingCard').addEventListener('click', function(){
+    const cf = window.colFilters; if(!cf) return;
+    if(cf.review_check === '__waiting') delete cf.review_check; else cf.review_check = '__waiting';
+    renderView();
+  });
+
+  // The row's own change handler saves the value; this repaints and refreshes the view.
+  $('tbody').addEventListener('change', function(e){
+    const el = e.target.closest('select.rcSel'); if(!el) return;
+    const idx = +el.dataset.idx, row = currentRows()[idx]; if(!row) return;
+    if(row.review_check === 'ready') mine[state.current + '|' + row.name] = true;
+    if(anyFilterOn()) { renderView(); return; }
+    paintRow(idx, row);
+    updateStats();
+  });
+
+  const _commit = soCommit;
+  soCommit = function(el, val){
+    _commit(el, val);
+    const idx = +el.dataset.idx, row = currentRows()[idx];
+    if(row && el.dataset.field === 'confirmed_by'){ paintRow(idx, row); updateStats(); }
+  };
+  const _cells = paintRowCells;
+  paintRowCells = function(idx, row){ const tr = _cells(idx, row); paintRow(idx, row); return tr; };
+  const _stats = updateStats;
+  updateStats = function(){ _stats.apply(this, arguments); paintCard(); };
+  const _render = render;
+  render = function(){ _render.apply(this, arguments); paintAll(); paintCard(); };
+  paintCard();
 })();
 </script>
 <script>
