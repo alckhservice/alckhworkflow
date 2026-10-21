@@ -1477,17 +1477,32 @@ function carryBlanksForward(keys){
   }
   return filled;
 }
+//   signoffReset2610 → October 2026: clear Review By / Confirmed By that were only carried over from
+//                      September. A name someone actually picked in October (it has an edit record) stays.
+function clearCarriedSignoff(){
+  const m = 'October 2026', month = state.months[m];
+  if(!month || !month.rows) return 0;
+  let cleared = 0;
+  month.rows.forEach(function(r){
+    const info = (editInfo[m] && editInfo[m][r.name]) || {};
+    ['review_by', 'confirmed_by', 'review_check'].forEach(function(k){
+      if(r[k] && !info[k]){ r[k] = ''; cleared++; }
+    });
+  });
+  return cleared;
+}
 function runOneTimeFixes(){
   if(!state || !state.order) return;
   const done = state.fixes || {};
   const todo = [
     {flag:'signoffCarry1', keys: ['review_by', 'confirmed_by']},
-    {flag:'planFinishCarry1', keys: ['plan_finish']}
+    {flag:'planFinishCarry1', keys: ['plan_finish']},
+    {flag:'signoffReset2610', run: clearCarriedSignoff}
   ].filter(function(f){ return !done[f.flag]; });
   if(!todo.length) return;
   const fixes = Object.assign({}, done);
   todo.forEach(function(f){
-    console.log('One-time fill ' + f.flag + ':', carryBlanksForward(f.keys));
+    console.log('One-time fix ' + f.flag + ':', f.run ? f.run() : carryBlanksForward(f.keys));
     fixes[f.flag] = true;
   });
   state.fixes = fixes;
@@ -2894,7 +2909,7 @@ document.getElementById('btnRenameMonth').addEventListener('click', function(){
 
 document.getElementById('btnNewMonth').addEventListener('click', function(){
   const suggested = nextMonthGuess(state.order[state.order.length-1]);
-  const name = prompt('Name the new month (same company list, Plan Finish and Review By kept; tasks, Actual Finish Date, Send to Manager and Confirmed By start blank):', suggested);
+  const name = prompt('Name the new month (same company list, Plan Finish kept; tasks, Actual Finish Date and the sign-off columns start blank):', suggested);
   if(!name || !name.trim()) return;
   const clean = name.trim();
   if(!isValidMonthLabel(clean)){ alert('Use the month name and year, for example "October 2026".'); return; }
@@ -2906,8 +2921,7 @@ document.getElementById('btnNewMonth').addEventListener('click', function(){
     if(r.stopped_from) nr.stopped_from = r.stopped_from;
     if(r.lead_from) nr.lead_from = r.lead_from;
     if(r.pkg) nr.pkg = r.pkg; // service package stays; Bank report status starts blank each month
-    if(r.review_by) nr.review_by = r.review_by; // reviewer in charge stays until changed manually
-    // Send to Manager and Confirmed By are signed off again every month, so they start blank
+    // Sign-off (Review By, Send to Manager, Confirmed By) is done again every month, so it starts blank
     COLS.forEach(function(c){ nr[c.key] = (DROPDOWN_COLS[c.key] && DROPDOWN_COLS[c.key].pending) ? 'na' : false; });
     nr.plan_finish = r.plan_finish || ''; // Plan Finish stays until changed manually
     nr.actual_finish = '';                // Actual Finish Date starts blank each month
