@@ -2485,8 +2485,8 @@ function rcState(row){
   if(row.review_check === 'ready') return row.confirmed_by ? 'done' : 'ready';
   return row.review_check === 'returned' ? 'returned' : 'none';
 }
-// Not yet reviewed = the reviewer has not sent it to the manager (or it came back) and it is not confirmed.
-function isNotReviewed(row){ return !isOut(row) && row.review_check !== 'ready' && !row.confirmed_by; }
+// Not yet reviewed (pending) = Send to Manager is not "Ready" (blank or Return), whatever Confirmed By shows.
+function isNotReviewed(row){ return !isOut(row) && row.review_check !== 'ready'; }
 function isWaitingConfirm(row){ return row.review_check === 'ready' && !row.confirmed_by && !isOut(row); }
 function rcTitle(row){
   const st = rcState(row);
