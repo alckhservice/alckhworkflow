@@ -993,19 +993,27 @@
   .textSel.awaiting{box-shadow:var(--press-sm), 0 0 0 2px var(--warn); animation:rcPulse 1.8s ease-in-out infinite;}
   .textSel.awaiting::placeholder{color:var(--warn); opacity:1; font-weight:700;}
   @keyframes rcPulse{50%{box-shadow:var(--press-sm), 0 0 0 4px color-mix(in srgb, var(--warn) 30%, transparent);}}
-  .stat.revcard{grid-column:1 / -1; min-height:0; align-items:stretch;}
-  .rev-head{display:flex; align-items:baseline; gap:10px; margin-bottom:8px;}
+  .stat.revcard{grid-column:span 3; min-height:0; justify-content:flex-start; padding:9px 12px;}
+  .rev-head{display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:5px;}
   .rev-head .l{margin:0;}
-  .rev-total{font-size:11.5px; color:var(--muted);}
-  .rev-list{display:flex; flex-wrap:wrap; gap:8px;}
-  .rev-chip{display:flex; align-items:center; gap:8px; border:none; cursor:pointer; font:inherit; font-size:12.5px; color:var(--ink2);
-    background:var(--neu-bg); box-shadow:var(--raise-sm); border-radius:99px; padding:5px 6px 5px 12px;}
-  .rev-chip b{min-width:26px; text-align:center; font-size:13px; padding:2px 8px; border-radius:99px; color:#fff; background:var(--warn);}
+  .rev-total{font-size:10.5px; color:var(--muted); white-space:nowrap;}
+  .rev-list{display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:3px 6px;}
+  .rev-chip{display:flex; align-items:center; gap:4px; min-width:0; border:none; cursor:pointer; font:inherit; font-size:11px; color:var(--ink2);
+    background:transparent; border-radius:99px; padding:2px 2px 2px 6px; text-align:left;}
+  .rev-chip span{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .rev-chip b{min-width:22px; text-align:center; font-size:11px; padding:1px 6px; border-radius:99px; color:#fff; background:var(--warn);}
   .rev-chip.zero b{background:var(--ok);}
   .rev-chip.unassigned b{background:var(--muted);}
-  .rev-chip small{font-size:10.5px; color:var(--muted);}
-  .rev-chip:hover{box-shadow:var(--raise);}
+  .rev-chip small{font-size:10px; font-weight:700; color:var(--warn);}
+  .rev-chip:hover{box-shadow:var(--raise-sm);}
   .rev-chip.on{box-shadow:var(--press-sm), 0 0 0 2px var(--ring-soft); font-weight:600;}
+  .toolbar .stat.tb-inout{flex-direction:row; align-items:center; gap:10px; min-height:0; padding:6px 14px; border-radius:99px; white-space:nowrap;}
+  .toolbar .stat.tb-inout .l{margin:0; font-size:9.5px;}
+  .toolbar .stat.tb-inout .n{font-size:16px; line-height:1;}
+  .toolbar .stat.tb-inout .n .lead{font-size:11px;}
+  #soPick .so-add{color:var(--brand-text); font-weight:600; border-top:1px solid var(--line); margin-top:2px;}
+  #soPick .so-del{float:right; margin-left:10px; padding:0 4px; color:var(--muted); font-weight:700;}
+  #soPick .so-del:hover{color:var(--bad);}
   @media print{ .stat.revcard{display:none;} }
   .stat.waiting{cursor:pointer;}
   .stat.waiting .n{color:var(--warn);}
@@ -1133,12 +1141,11 @@
     <div class="stat progress" data-pending="pca" title="Double-click to see pending clients"><div class="n" id="statPendingPCA">0</div><div class="l">PCA PENDING</div></div>
     <div class="stat progress" data-pending="bk" title="Double-click to see pending clients"><div class="n" id="statPendingBK">0</div><div class="l">BK PENDING</div></div>
     <div class="stat progress" data-pending="tax" title="Double-click to see pending clients"><div class="n" id="statPendingTAX">0</div><div class="l">TAX PENDING</div></div>
-    <div class="stat inout" data-pending="inout" title="Double-click to see new, stopped and lead clients"><div class="n" id="statInOut"><span class="in">+0</span><span class="out">&minus;0</span></div><div class="l">NEW IN / STOPPED · LEADS</div></div>
-    <div class="stat waiting zero" id="statWaitingCard" title="Reviewed and sent to the manager, not confirmed yet. Click to show only these companies."><div class="n" id="statWaiting">0</div><div class="l">WAITING FOR CONFIRM</div></div>
     <div class="stat revcard" id="statReviewers" title="Companies each reviewer still has to finish this month (not fully done + signed off). Click a name to see them.">
       <div class="rev-head"><span class="l">REVIEWER PENDING</span><span class="rev-total" id="revTotal"></span></div>
       <div class="rev-list" id="revList"></div>
     </div>
+    <div class="stat waiting zero" id="statWaitingCard" title="Reviewed and sent to the manager, not confirmed yet. Click to show only these companies."><div class="n" id="statWaiting">0</div><div class="l">WAITING FOR CONFIRM</div></div>
   </div>
 
 
@@ -1187,6 +1194,7 @@
     </div>
     <div class="active-filters" id="activeFilters"></div>
     <div class="spacer"></div>
+    <div class="stat inout tb-inout" data-pending="inout" title="Double-click to see new, stopped and lead clients"><div class="l">NEW IN / STOPPED · LEADS</div><div class="n" id="statInOut"><span class="in">+0</span><span class="out">&minus;0</span></div></div>
     <button class="btn ghost" id="btnAddRow">+ Add company</button>
     <button class="btn ghost" id="btnAddLead" title="Register a prospect that has not confirmed yet. It counts as a new client in the month you confirm it.">+ Add lead</button>
     <div class="dd">
@@ -1845,6 +1853,7 @@ function startCloudSync(){
   }, onCloudError);
   loadAllRows();
   watchMonth(state.current);
+  listenPeople();
 }
 
 // Once at start-up: every month, so this computer has the whole shared copy.
@@ -2351,14 +2360,71 @@ const SIGNOFF_COLS = [
   {key:'confirmed_by', label:'Confirmed By', options:['Mr. Chhun', 'Mrs. Mouylaing', 'Ms Huychheng', 'Mr. Borey']}
 ];
 const SIGNOFF_FILTERS = {review_by:'filterReview', confirmed_by:'filterConfirm'};
-(function(){
+function buildSignoffFilters(){
   SIGNOFF_COLS.forEach(function(c){
     const sel = document.getElementById(SIGNOFF_FILTERS[c.key]); if(!sel) return;
-    let h = sel.innerHTML + '<option value="__blank__">' + c.label + ': (blank)</option>';
+    const cur = sel.value;
+    let h = '<option value="">' + (c.key === 'review_by' ? 'Reviewer: all' : 'Confirmer: all') + '</option>' +
+            '<option value="__blank__">' + c.label + ': (blank)</option>';
     c.options.forEach(function(o){ h += '<option value="' + escapeAttr(o) + '">' + escapeAttr(o) + '</option>'; });
     sel.innerHTML = h;
+    sel.value = cur;
   });
-})();
+}
+buildSignoffFilters();
+
+// ---- Names in the Review By / Confirmed By lists ----
+// Built-in names above + names the team adds from the picker ("+ Add …"). Added names are shared through
+// <prefix>meta/people {review_by:[…], confirmed_by:[…]} so everyone sees them. Admins can remove added names.
+const SO_BUILTIN = {};
+SIGNOFF_COLS.forEach(function(c){ SO_BUILTIN[c.key] = c.options.slice(); });
+let soExtra = {review_by: [], confirmed_by: []};
+const peopleRef = db.collection(COLL_PREFIX + 'meta').doc('people');
+function soApplyPeople(){
+  SIGNOFF_COLS.forEach(function(c){
+    const list = SO_BUILTIN[c.key].slice();
+    (soExtra[c.key] || []).forEach(function(n){ if(n && list.indexOf(n) < 0) list.push(n); });
+    c.options.length = 0;                       // change in place: other code holds this array
+    list.forEach(function(n){ c.options.push(n); });
+  });
+  buildSignoffFilters();
+}
+function soIsExtra(field, name){ return !!SO_BUILTIN[field] && SO_BUILTIN[field].indexOf(name) < 0; }
+function listenPeople(){
+  peopleRef.onSnapshot(function(snap){
+    const d = (snap.exists && snap.data()) || {};
+    soExtra = {review_by: Array.isArray(d.review_by) ? d.review_by : [], confirmed_by: Array.isArray(d.confirmed_by) ? d.confirmed_by : []};
+    soApplyPeople();
+    try{ updateStats(); }catch(e){}
+  }, function(err){ console.error('Names list failed', err); });
+}
+function soSavePeople(field){
+  const upd = {}; upd[field] = soExtra[field];
+  peopleRef.set(upd, {merge: true}).catch(function(err){
+    console.error('Saving names failed', err);
+    showNotice('Could not save the names list — check the connection and try again.');
+  });
+}
+function soAddPerson(field, name){
+  name = String(name || '').trim().replace(/\s+/g, ' ');
+  const c = SIGNOFF_COLS.find(function(x){ return x.key === field; });
+  if(!name || !c) return null;
+  const have = c.options.find(function(o){ return o.toLowerCase() === name.toLowerCase(); });
+  if(have) return have;
+  if(!confirm('Add "' + name + '" to the ' + c.label + ' list for the whole team?')) return null;
+  soExtra[field] = (soExtra[field] || []).concat([name]);
+  soApplyPeople();
+  soSavePeople(field);
+  return name;
+}
+function soRemovePerson(field, name){
+  const c = SIGNOFF_COLS.find(function(x){ return x.key === field; });
+  if(!c || !soIsExtra(field, name)) return;
+  if(!confirm('Remove "' + name + '" from the ' + c.label + ' list? Cells that already show this name keep it.')) return;
+  soExtra[field] = (soExtra[field] || []).filter(function(n){ return n !== name; });
+  soApplyPeople();
+  soSavePeople(field);
+}
 function signoffFilterOn(){ return Object.keys(SIGNOFF_FILTERS).some(function(k){ return !!document.getElementById(SIGNOFF_FILTERS[k]).value; }); }
 function anyFilterOn(){ return document.getElementById('statusFilter').value !== 'all' || signoffFilterOn() || !!document.getElementById('filterPkg').value; }
 
@@ -2442,7 +2508,13 @@ function soPaint(){
   const q = soEl.value.trim() === soEl.dataset.saved ? '' : soEl.value.trim();
   let h = soEl.dataset.saved ? '<div class="so-opt so-clear" data-clear="1">Clear</div>' : '';
   if(!soMatches.length) h += '<div class="so-none">No matching name</div>';
-  soMatches.forEach(function(o, i){ h += '<div class="so-opt' + (i === soOn ? ' on' : '') + '" data-i="' + i + '">' + soHighlight(o, q) + '</div>'; });
+  const field = soEl.dataset.field;
+  soMatches.forEach(function(o, i){
+    const del = (isAdminUser && soIsExtra(field, o)) ? '<span class="so-del" data-del="' + i + '" title="Remove this name from the list">&times;</span>' : '';
+    h += '<div class="so-opt' + (i === soOn ? ' on' : '') + '" data-i="' + i + '">' + del + soHighlight(o, q) + '</div>';
+  });
+  const exact = q && soOptions(field).some(function(o){ return o.toLowerCase() === q.toLowerCase(); });
+  if(!exact) h += '<div class="so-opt so-add" data-add="1">' + (q ? '+ Add &ldquo;' + pmEsc(q) + '&rdquo;' : '+ Add new name&hellip;') + '</div>';
   soPick.innerHTML = h;
   const r = soEl.getBoundingClientRect();
   soPick.classList.add('show');
@@ -2471,7 +2543,14 @@ function soBind(el){
     if(soEl !== el) return;
     if(e.key === 'ArrowDown'){ e.preventDefault(); soOn = Math.min(soOn + 1, soMatches.length - 1); soPaint(); }
     else if(e.key === 'ArrowUp'){ e.preventDefault(); soOn = Math.max(soOn - 1, 0); soPaint(); }
-    else if(e.key === 'Enter'){ e.preventDefault(); if(!el.value.trim()) soCommit(el, ''); else if(soMatches[soOn]) soCommit(el, soMatches[soOn]); el.blur(); }
+    else if(e.key === 'Enter'){
+      e.preventDefault();
+      const t = el.value.trim();
+      if(!t) soCommit(el, '');
+      else if(soMatches[soOn]) soCommit(el, soMatches[soOn]);
+      else { const added = soAddPerson(el.dataset.field, t); if(added) soCommit(el, added); }
+      el.blur();
+    }
     else if(e.key === 'Escape'){ e.preventDefault(); el.value = el.dataset.saved || ''; el.blur(); }
     else if(e.key === 'Tab'){ const t = el.value.trim(); if(t && t !== el.dataset.saved && soMatches[soOn]) soCommit(el, soMatches[soOn]); }
   });
@@ -2488,9 +2567,20 @@ function soBind(el){
   });
 }
 soPick.addEventListener('mousedown', function(e){
-  const opt = e.target.closest('.so-opt'); if(!opt || !soEl) return;
+  if(!soEl) return;
+  const del = e.target.closest('.so-del');
+  if(del){ e.preventDefault(); soRemovePerson(soEl.dataset.field, soMatches[+del.dataset.del]); if(soEl) soPaint(); return; }
+  const opt = e.target.closest('.so-opt'); if(!opt) return;
   e.preventDefault();
   const el = soEl;
+  if(opt.dataset.add){
+    const typed = el.value.trim() !== (el.dataset.saved || '') ? el.value.trim() : '';
+    const c = SIGNOFF_COLS.find(function(x){ return x.key === el.dataset.field; });
+    const added = soAddPerson(el.dataset.field, typed || prompt('New name for the ' + (c ? c.label : '') + ' list (e.g. Ms. Dara):', ''));
+    if(added) soCommit(el, added);
+    el.blur();
+    return;
+  }
   soCommit(el, opt.dataset.clear ? '' : soMatches[+opt.dataset.i]);
   el.blur();
 });
@@ -3883,12 +3973,13 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
       const on = cf.review_by === it.key && cf.progress === '__open';
       h += '<button type="button" class="rev-chip' + (it.left ? '' : ' zero') + (on ? ' on' : '') + '" data-rev="' + escapeAttr(it.key) + '" title="' +
         escapeAttr(it.n + ': ' + it.left + ' remaining of ' + it.all + ' assigned' + (it.wait ? ', ' + it.wait + ' waiting for the manager' : '')) + '">' +
-        pmEsc(it.n) + (it.wait ? ' <small>' + it.wait + ' waiting</small>' : '') + '<b>' + it.left + '</b></button>';
+        '<span>' + pmEsc(String(it.n).replace(/^(mrs?|ms)\.?\s+/i, '')) + '</span>' + (it.wait ? '<small title="waiting for the manager">' + it.wait + '&#9203;</small>' : '') + '<b>' + it.left + '</b></button>';
     });
     const onUn = cf.review_by === '__blank' && cf.progress === '__open';
-    h += '<button type="button" class="rev-chip unassigned' + (onUn ? ' on' : '') + '" data-rev="__blank" title="Active companies with no Review By picked yet">Not assigned<b>' + un + '</b></button>';
+    h += '<button type="button" class="rev-chip unassigned' + (onUn ? ' on' : '') + '" data-rev="__blank" title="Active companies with no Review By picked yet"><span>No reviewer</span><b>' + un + '</b></button>';
     $('revList').innerHTML = h;
-    $('revTotal').textContent = totalLeft + ' remaining with a reviewer · ' + un + ' not assigned';
+    $('revTotal').textContent = totalLeft + ' left';
+    $('revTotal').title = totalLeft + ' remaining with a reviewer · ' + un + ' not assigned';
   }
   $('revList').addEventListener('click', function(e){
     const b = e.target.closest('.rev-chip'); if(!b) return;
