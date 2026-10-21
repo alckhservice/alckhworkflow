@@ -996,6 +996,7 @@
   .stat.revcard{grid-column:span 3; min-height:0; justify-content:flex-start; padding:9px 12px;}
   .rev-head{display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:5px;}
   .rev-head .l{margin:0;}
+  .rev-chip b{white-space:nowrap;}
   .rev-total{font-size:10.5px; color:var(--muted); white-space:nowrap;}
   .rev-list{display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:3px 6px;}
   .rev-chip{display:flex; align-items:center; gap:4px; min-width:0; border:none; cursor:pointer; font:inherit; font-size:11px; color:var(--ink2);
@@ -1005,6 +1006,9 @@
   .rev-chip.zero b{background:var(--ok);}
   .rev-chip.unassigned b{background:var(--muted);}
   .rev-chip small{font-size:10px; font-weight:700; color:var(--warn);}
+  .rev-chip b em{font-style:normal;}
+  .rev-chip b i{font-style:normal; font-weight:500; opacity:.85; font-size:10px;}
+  .rev-total em{font-style:normal; font-weight:700; color:var(--warn);}
   .rev-chip:hover{box-shadow:var(--raise-sm);}
   .rev-chip.on{box-shadow:var(--press-sm), 0 0 0 2px var(--ring-soft); font-weight:600;}
   .toolbar .stat.tb-inout{flex-direction:row; align-items:center; gap:10px; min-height:0; padding:6px 14px; border-radius:99px; white-space:nowrap;}
@@ -1141,7 +1145,7 @@
     <div class="stat progress" data-pending="pca" title="Double-click to see pending clients"><div class="n" id="statPendingPCA">0</div><div class="l">PCA PENDING</div></div>
     <div class="stat progress" data-pending="bk" title="Double-click to see pending clients"><div class="n" id="statPendingBK">0</div><div class="l">BK PENDING</div></div>
     <div class="stat progress" data-pending="tax" title="Double-click to see pending clients"><div class="n" id="statPendingTAX">0</div><div class="l">TAX PENDING</div></div>
-    <div class="stat revcard" id="statReviewers" title="Companies each reviewer still has to finish this month (not fully done + signed off). Click a name to see them.">
+    <div class="stat revcard" id="statReviewers" title="Each reviewer: companies not yet reviewed / total companies they review this month. Click a name to see the ones not yet reviewed.">
       <div class="rev-head"><span class="l">REVIEWER PENDING</span><span class="rev-total" id="revTotal"></span></div>
       <div class="rev-list" id="revList"></div>
     </div>
@@ -2374,15 +2378,18 @@ function buildSignoffFilters(){
 buildSignoffFilters();
 
 // ---- Names in the Review By / Confirmed By lists ----
-// Built-in names above + names the team adds from the picker ("+ Add …"). Added names are shared through
-// <prefix>meta/people {review_by:[…], confirmed_by:[…]} so everyone sees them. Admins can remove added names.
+// Built-in names above + names the team adds from the picker ("+ Add …"), shared through
+// <prefix>meta/people {review_by:[…], confirmed_by:[…], review_by_hidden:[…], confirmed_by_hidden:[…]}.
+// Admins can remove any name (e.g. staff who resigned): added names are deleted, built-in names are hidden.
 const SO_BUILTIN = {};
 SIGNOFF_COLS.forEach(function(c){ SO_BUILTIN[c.key] = c.options.slice(); });
 let soExtra = {review_by: [], confirmed_by: []};
+let soHidden = {review_by: [], confirmed_by: []};
 const peopleRef = db.collection(COLL_PREFIX + 'meta').doc('people');
 function soApplyPeople(){
   SIGNOFF_COLS.forEach(function(c){
-    const list = SO_BUILTIN[c.key].slice();
+    const hide = soHidden[c.key] || [];
+    const list = SO_BUILTIN[c.key].filter(function(n){ return hide.indexOf(n) < 0; });
     (soExtra[c.key] || []).forEach(function(n){ if(n && list.indexOf(n) < 0) list.push(n); });
     c.options.length = 0;                       // change in place: other code holds this array
     list.forEach(function(n){ c.options.push(n); });
@@ -2393,13 +2400,15 @@ function soIsExtra(field, name){ return !!SO_BUILTIN[field] && SO_BUILTIN[field]
 function listenPeople(){
   peopleRef.onSnapshot(function(snap){
     const d = (snap.exists && snap.data()) || {};
-    soExtra = {review_by: Array.isArray(d.review_by) ? d.review_by : [], confirmed_by: Array.isArray(d.confirmed_by) ? d.confirmed_by : []};
+    const arr = function(v){ return Array.isArray(v) ? v : []; };
+    soExtra = {review_by: arr(d.review_by), confirmed_by: arr(d.confirmed_by)};
+    soHidden = {review_by: arr(d.review_by_hidden), confirmed_by: arr(d.confirmed_by_hidden)};
     soApplyPeople();
     try{ updateStats(); }catch(e){}
   }, function(err){ console.error('Names list failed', err); });
 }
 function soSavePeople(field){
-  const upd = {}; upd[field] = soExtra[field];
+  const upd = {}; upd[field] = soExtra[field]; upd[field + '_hidden'] = soHidden[field] || [];
   peopleRef.set(upd, {merge: true}).catch(function(err){
     console.error('Saving names failed', err);
     showNotice('Could not save the names list — check the connection and try again.');
@@ -2412,6 +2421,12 @@ function soAddPerson(field, name){
   const have = c.options.find(function(o){ return o.toLowerCase() === name.toLowerCase(); });
   if(have) return have;
   if(!confirm('Add "' + name + '" to the ' + c.label + ' list for the whole team?')) return null;
+  const builtin = SO_BUILTIN[field].find(function(o){ return o.toLowerCase() === name.toLowerCase(); });
+  if(builtin){ // a removed original name comes back
+    soHidden[field] = (soHidden[field] || []).filter(function(n){ return n !== builtin; });
+    soApplyPeople(); soSavePeople(field);
+    return builtin;
+  }
   soExtra[field] = (soExtra[field] || []).concat([name]);
   soApplyPeople();
   soSavePeople(field);
@@ -2419,9 +2434,12 @@ function soAddPerson(field, name){
 }
 function soRemovePerson(field, name){
   const c = SIGNOFF_COLS.find(function(x){ return x.key === field; });
-  if(!c || !soIsExtra(field, name)) return;
-  if(!confirm('Remove "' + name + '" from the ' + c.label + ' list? Cells that already show this name keep it.')) return;
-  soExtra[field] = (soExtra[field] || []).filter(function(n){ return n !== name; });
+  if(!c || !name || c.options.indexOf(name) < 0) return;
+  if(!confirm('Remove "' + name + '" from the ' + c.label + ' list (e.g. resigned)?\n\n' +
+              'Cells that already show this name keep it, so past months and History stay correct. ' +
+              'Give their unfinished companies to someone else.')) return;
+  if(soIsExtra(field, name)) soExtra[field] = (soExtra[field] || []).filter(function(n){ return n !== name; });
+  else soHidden[field] = (soHidden[field] || []).concat([name]);
   soApplyPeople();
   soSavePeople(field);
 }
@@ -2467,6 +2485,8 @@ function rcState(row){
   if(row.review_check === 'ready') return row.confirmed_by ? 'done' : 'ready';
   return row.review_check === 'returned' ? 'returned' : 'none';
 }
+// Not yet reviewed = the reviewer has not sent it to the manager (or it came back) and it is not confirmed.
+function isNotReviewed(row){ return !isOut(row) && row.review_check !== 'ready' && !row.confirmed_by; }
 function isWaitingConfirm(row){ return row.review_check === 'ready' && !row.confirmed_by && !isOut(row); }
 function rcTitle(row){
   const st = rcState(row);
@@ -2510,7 +2530,7 @@ function soPaint(){
   if(!soMatches.length) h += '<div class="so-none">No matching name</div>';
   const field = soEl.dataset.field;
   soMatches.forEach(function(o, i){
-    const del = (isAdminUser && soIsExtra(field, o)) ? '<span class="so-del" data-del="' + i + '" title="Remove this name from the list">&times;</span>' : '';
+    const del = isAdminUser ? '<span class="so-del" data-del="' + i + '" title="Remove this name from the list">&times;</span>' : '';
     h += '<div class="so-opt' + (i === soOn ? ' on' : '') + '" data-i="' + i + '">' + del + soHighlight(o, q) + '</div>';
   });
   const exact = q && soOptions(field).some(function(o){ return o.toLowerCase() === q.toLowerCase(); });
@@ -3765,6 +3785,7 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
       return [
         {v:'__waiting', l:'Waiting for manager', test:isWaitingConfirm},
         {v:'__none', l:'Not yet sent', test:function(r){ return !r.review_check; }},
+        {v:'__notrev', l:'Not yet reviewed', test:isNotReviewed},
         {v:'ready', l:'Ready (all)', test:function(r){ return r.review_check === 'ready'; }},
         {v:'returned', l:'Returned – needs fixing', test:function(r){ return r.review_check === 'returned'; }},
         {v:'__confirmed', l:'Confirmed', test:function(r){ return !!r.confirmed_by; }}
@@ -3953,39 +3974,43 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
     }
   }
 
-  // ---- Reviewer pending card: per reviewer, active companies not fully done + signed off ----
+  // ---- Reviewer pending card: per reviewer, companies not yet reviewed / total companies ----
   function paintReviewers(){
     const rows = currentRows().filter(function(r){ return !isOut(r); });
     const names = SIGNOFF_COLS[0].options.slice();
-    rows.forEach(function(r){ if(r.review_by && names.indexOf(r.review_by) < 0) names.push(r.review_by); });
+    rows.forEach(function(r){ if(r.review_by && names.indexOf(r.review_by) < 0) names.push(r.review_by); }); // incl. removed names still in use
     const cf = window.colFilters || {};
-    let totalLeft = 0;
+    let totPend = 0, totAll = 0;
     const items = names.map(function(n){
       const mine = rows.filter(function(r){ return r.review_by === n; });
-      const left = mine.filter(function(r){ return !isFullyDone(r, rowProgress(r)); });
-      const wait = left.filter(isWaitingConfirm).length;
-      totalLeft += left.length;
-      return {n: n, key: '=' + n, all: mine.length, left: left.length, wait: wait};
-    }).sort(function(a, b){ return b.left - a.left || b.all - a.all; });
+      const pend = mine.filter(isNotReviewed).length;
+      const wait = mine.filter(isWaitingConfirm).length;
+      const conf = mine.filter(function(r){ return !!r.confirmed_by; }).length;
+      totPend += pend; totAll += mine.length;
+      return {n: n, key: '=' + n, all: mine.length, pend: pend, wait: wait, conf: conf};
+    }).sort(function(a, b){ return b.pend - a.pend || b.all - a.all; });
     const un = rows.filter(function(r){ return !r.review_by; }).length;
     let h = '';
     items.forEach(function(it){
-      const on = cf.review_by === it.key && cf.progress === '__open';
-      h += '<button type="button" class="rev-chip' + (it.left ? '' : ' zero') + (on ? ' on' : '') + '" data-rev="' + escapeAttr(it.key) + '" title="' +
-        escapeAttr(it.n + ': ' + it.left + ' remaining of ' + it.all + ' assigned' + (it.wait ? ', ' + it.wait + ' waiting for the manager' : '')) + '">' +
-        '<span>' + pmEsc(String(it.n).replace(/^(mrs?|ms)\.?\s+/i, '')) + '</span>' + (it.wait ? '<small title="waiting for the manager">' + it.wait + '&#9203;</small>' : '') + '<b>' + it.left + '</b></button>';
+      const on = cf.review_by === it.key && cf.review_check === '__notrev';
+      const tip = it.n + ': ' + it.all + ' compan' + (it.all === 1 ? 'y' : 'ies') + ' to review · ' + it.pend + ' not yet reviewed · ' +
+                  it.wait + ' waiting for the manager · ' + it.conf + ' confirmed';
+      h += '<button type="button" class="rev-chip' + (it.pend ? '' : ' zero') + (on ? ' on' : '') + '" data-rev="' + escapeAttr(it.key) + '" title="' + escapeAttr(tip) + '">' +
+        '<span>' + pmEsc(String(it.n).replace(/^(mrs?|ms)\.?\s+/i, '')) + '</span>' +
+        '<b><em>' + it.pend + '</em><i>/' + it.all + '</i></b></button>';
     });
-    const onUn = cf.review_by === '__blank' && cf.progress === '__open';
-    h += '<button type="button" class="rev-chip unassigned' + (onUn ? ' on' : '') + '" data-rev="__blank" title="Active companies with no Review By picked yet"><span>No reviewer</span><b>' + un + '</b></button>';
+    const onUn = cf.review_by === '__blank' && cf.review_check === '__notrev';
+    h += '<button type="button" class="rev-chip unassigned' + (onUn ? ' on' : '') + '" data-rev="__blank" title="Active companies with no Review By picked yet"><span>No reviewer</span><b><em>' + un + '</em></b></button>';
     $('revList').innerHTML = h;
-    $('revTotal').textContent = totalLeft + ' left';
-    $('revTotal').title = totalLeft + ' remaining with a reviewer · ' + un + ' not assigned';
+    $('revTotal').innerHTML = '<em>' + totPend + '</em> not yet reviewed / ' + totAll;
+    $('revTotal').title = totPend + ' not yet reviewed out of ' + totAll + ' companies with a reviewer · ' + un + ' with no reviewer';
   }
   $('revList').addEventListener('click', function(e){
     const b = e.target.closest('.rev-chip'); if(!b) return;
     const cf = window.colFilters; if(!cf) return;
-    if(cf.review_by === b.dataset.rev && cf.progress === '__open'){ delete cf.review_by; delete cf.progress; }
-    else { cf.review_by = b.dataset.rev; cf.progress = '__open'; }
+    if(cf.progress === '__open') delete cf.progress; // left over from the previous version of this card
+    if(cf.review_by === b.dataset.rev && cf.review_check === '__notrev'){ delete cf.review_by; delete cf.review_check; }
+    else { cf.review_by = b.dataset.rev; cf.review_check = '__notrev'; }
     renderView();
   });
 
