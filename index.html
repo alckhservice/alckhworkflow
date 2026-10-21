@@ -2317,9 +2317,14 @@ function engagementText(row){
 function setStopped(idx, stop){
   const rows = currentRows(), row = rows[idx]; if(!row) return;
   const from = state.current, p = state.order.indexOf(from), name = row.name;
+  // Re-activating a company that stopped in an EARLIER month = the client engaged back: count it as NEW in this month.
+  // Undoing a stop made in this same month (a mistake) does not.
+  const reEngaged = !stop && !!row.stopped_from && row.stopped_from !== from;
   const msg = stop
     ? 'Mark "' + name + '" as STOPPED ENGAGED from ' + from + '?\n\nThe company stays in the table (highlighted red) but no longer counts toward progress or pending totals. Later months will show it as stopped too.'
-    : 'Re-activate "' + name + '" from ' + from + '?\n\nIt will count toward progress again in this month and later months.';
+    : reEngaged
+      ? 'Re-activate "' + name + '" from ' + from + '?\n\nIt stopped from ' + row.stopped_from + ', so it will count as a NEW client engaged back in ' + from + ', and toward progress again from this month on.'
+      : 'Re-activate "' + name + '" from ' + from + '?\n\nIt will count toward progress again in this month and later months.';
   if(!confirm(msg)) return;
   state.order.forEach(function(m, i){
     if(i < p || !state.months[m]) return;
@@ -2327,7 +2332,7 @@ function setStopped(idx, stop){
       const same = (m === from) ? (ri === idx) : (r.name === name);
       if(!same) return;
       if(stop){ if(!r.stopped_from || state.order.indexOf(r.stopped_from) > p) r.stopped_from = from; }
-      else delete r.stopped_from;
+      else { delete r.stopped_from; if(reEngaged) r.engaged_from = from; }
     });
   });
   render();
