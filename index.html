@@ -1914,7 +1914,7 @@ function fieldLabel(f){
 function fmtVal(f, v){
   if(v === undefined || v === null || v === '') return '—';
   if(f === 'review_check') return ({ready:'Ready – sent to manager', returned:'Returned – needs fixing'})[v] || String(v);
-  if(f === 'dn') return v === 'request' ? 'Request DN' : String(v);
+  if(f === 'dn') return dnLabel(v) || String(v);
   const d = DROPDOWN_COLS[f];
   if(d) return valLabel(f, v);
   if(typeof v === 'boolean') return v ? 'Done' : '—';
@@ -2464,7 +2464,8 @@ const PKG_OPTS = [
 ];
 const BANKRPT_OPTS = [{v:'sent', l:'1. Report sent'}, {v:'notsent', l:'2. Not yet sent'}];
 // DN (debit note): plain dropdown shown in the TAX group between Separate Bill and E-filing.
-const DN_OPTS = [{v:'request', l:'Request DN'}];
+const DN_OPTS = [{v:'request', l:'Request DN'}, {v:'sent', l:'DN Sent'}];
+function dnLabel(v){ const o = DN_OPTS.find(function(x){ return x.v === v; }); return o ? o.l : ''; }
 // Summary card groups: option 4 is counted under BK + Tax.
 const PKG_GROUP = {tax:'tax', bk_tax:'bk', bk_tax_4:'bk', bk_tax_waste:'waste'};
 function xSelect(opts, field, v, idx, locked, title){
@@ -3231,7 +3232,7 @@ function exportSchedule(rows, opts){
       else if(c.key === 'tax_payment') line.push(Math.round(groupProgress(row, GROUPS.tax)*10000)/10000);
     });
     line.push(Math.round(rowProgress(row)*10000)/10000);
-    line.push(row.plan_finish || '', row.actual_finish || '', row.review_by || '', row.confirmed_by || '', engagementText(row), fmtVal('review_check', row.review_check).replace('—', ''), row.dn === 'request' ? 'Request DN' : '');
+    line.push(row.plan_finish || '', row.actual_finish || '', row.review_by || '', row.confirmed_by || '', engagementText(row), fmtVal('review_check', row.review_check).replace('—', ''), dnLabel(row.dn));
     if(opts.extra) line.push(opts.extra.values[ri] || '');
     aoa.push(line);
   });
@@ -3337,7 +3338,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
         if((em = eng.match(/stopped engaged from\s+(.+)/i))) row.stopped_from = em[1].trim();
         else if((em = eng.match(/new engaged(?:\s+in)?\s+(.+)/i))) row.engaged_from = em[1].trim();
         else if((em = eng.match(/lead \(not confirmed\) since\s+(.+)/i))) row.lead_from = em[1].trim();
-        if(dnCol > 0 && /request/i.test(String(line[dnCol] || ''))) row.dn = 'request';
+        if(dnCol > 0){ const dv = String(line[dnCol] || '').toLowerCase(); if(dv.indexOf('sent') >= 0) row.dn = 'sent'; else if(dv.indexOf('request') >= 0) row.dn = 'request'; }
         if(rcCol > 0){ const rc = String(line[rcCol] || '').toLowerCase(); if(rc.indexOf('ready') === 0) row.review_check = 'ready'; else if(rc.indexOf('return') === 0) row.review_check = 'returned'; }
         newRows.push(row);
       }
