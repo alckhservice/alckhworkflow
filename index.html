@@ -788,7 +788,7 @@
   .stat .l{font-family:var(--font); font-size:11px; font-weight:600; letter-spacing:.06em; color:var(--muted); margin-top:3px;}
   .stat.complete .n{color:var(--ok);}
   .stat.progress .n{color:var(--warn);}
-  .stat.pkgs{grid-column:span 2;}
+  .stat.pkgs{grid-column:span 1;}
   .stat.pkgs .n span{font-family:var(--font); font-size:12px; color:var(--muted); padding:2px 8px; border-radius:99px; transition:box-shadow .12s;}
   .stat.pkgs .n span:hover{box-shadow:var(--press-sm);}
   .stat.pkgs .n b{font-family:var(--font); font-size:19px; color:var(--brand-text);}
@@ -796,7 +796,7 @@
   .stat.inout .n .in{color:var(--ok);}
   .stat.inout .n .out{color:var(--bad);}
   .stat.inout .n .lead{font-family:var(--font); color:var(--info);}
-  @media (max-width:900px){ .stat.pkgs{grid-column:span 2;} }
+  @media (max-width:900px){ .stat.pkgs{grid-column:span 1;} }
 
   /* Table */
   .tablewrap{background:var(--neu-bg); backdrop-filter:none; -webkit-backdrop-filter:none; border:none; border-radius:22px; box-shadow:var(--raise);}
@@ -929,6 +929,11 @@
   .stat.pkgs .n{gap:2px 6px;}
   .stat.pkgs .n span{padding:1px 6px; font-size:11px;}
   .stat.pkgs .n b{font-size:17px;}
+  /* One-column package card: the three packages stack as compact rows (label left, count right) */
+  .stat.pkgs .n{flex-direction:column; flex-wrap:nowrap; align-items:stretch; gap:0;}
+  .stat.pkgs .n span{display:flex; justify-content:space-between; align-items:baseline; gap:4px; padding:0 4px; margin:0 -4px; font-size:10.5px; line-height:1.3;}
+  .stat.pkgs .n b{font-size:13px; margin-left:0;}
+  .stat.pkgs .l{margin-top:2px;}
   .stat.inout .n{font-size:19px;}
   .stat.inout .n .lead{font-size:11px; margin-left:6px;}
 
@@ -1145,10 +1150,11 @@
     <div class="stat"><div class="n" id="statTotal">0</div><div class="l">ACTIVE COMPANIES</div></div>
     <div class="stat complete"><div class="n" id="statComplete">0</div><div class="l" id="statCompleteLabel">FULLY DONE</div></div>
     <div class="stat progress"><div class="n" id="statProgress">0</div><div class="l">IN PROGRESS</div></div>
-    <div class="stat pkgs" title="Active companies by service package"><div class="n"><span data-pkgf="tax" title="Click to show only these companies">Tax only <b id="statPkgTax">0</b></span><span data-pkgf="bk" title="Click to show only these companies">BK + Tax <b id="statPkgBK">0</b></span><span data-pkgf="waste" title="Click to show only these companies">BK + Tax + Waste <b id="statPkgWaste">0</b></span></div><div class="l">COMPANIES BY PACKAGE</div></div>
+    <div class="stat pkgs" title="Active companies by service package"><div class="n"><span data-pkgf="tax" title="Click to show only these companies">Tax only <b id="statPkgTax">0</b></span><span data-pkgf="bk" title="Click to show only these companies">BK+Tax <b id="statPkgBK">0</b></span><span data-pkgf="waste" title="BK + Tax + Waste — click to show only these companies">BK+Tax+Waste <b id="statPkgWaste">0</b></span></div><div class="l">COMPANIES BY PACKAGE</div></div>
     <div class="stat progress" data-pending="pca" title="Double-click to see pending clients"><div class="n" id="statPendingPCA">0</div><div class="l">PCA PENDING</div></div>
     <div class="stat progress" data-pending="bk" title="Double-click to see pending clients"><div class="n" id="statPendingBK">0</div><div class="l">BK PENDING</div></div>
     <div class="stat progress" data-pending="tax" title="Double-click to see pending clients"><div class="n" id="statPendingTAX">0</div><div class="l">TAX PENDING</div></div>
+    <div class="stat progress" data-pending="taxpay" title="Active clients whose Tax Payment is not Paid yet (Not Receive or Receive, Unpaid). Double-click to see them."><div class="n" id="statPendingPay">0</div><div class="l">TAX PAYMENT PENDING</div></div>
     <div class="stat revcard" id="statReviewers" title="Each reviewer: companies not yet reviewed / total companies they review this month. Click a name to see the ones not yet reviewed.">
       <div class="rev-head"><span class="l">REVIEWER PENDING</span><span class="rev-total" id="revTotal"></span></div>
       <div class="rev-list" id="revList"></div>
@@ -2641,7 +2647,8 @@ document.getElementById('statCompleteLabel').parentNode.title =
 const GROUPS = {
   pca: ['import_', 'export'],
   bk: ['gp1', 'gp2', 'vat0', 'fa', 'sales0cmt', 'invadj', 'salary', 'bankrec'],
-  tax: ['efiling', 'bill_sent', 'tax_payment']
+  tax: ['efiling', 'bill_sent', 'tax_payment'],
+  taxpay: ['tax_payment'] // "Tax Payment Pending" card: not Paid yet
 };
 
 function groupProgress(row, keys){
@@ -2761,7 +2768,7 @@ function render(){
   tbody.innerHTML = '';
 
   let total=0, complete=0, zero=0, inprog=0, sumProg=0;
-  let pendingPCA=0, pendingBK=0, pendingTAX=0;
+  let pendingPCA=0, pendingBK=0, pendingTAX=0, pendingPay=0;
 
   rows.forEach((row, idx) => {
     const prog = rowProgress(row);
@@ -2777,6 +2784,7 @@ function render(){
     if(!out && pcaPct < 0.999) pendingPCA++;
     if(!out && bkPct < 0.999) pendingBK++;
     if(!out && taxPct < 0.999) pendingTAX++;
+    if(!out && !isDoneVal('tax_payment', row.tax_payment)) pendingPay++;
 
     if(!rowMatchesView(row)) return;
 
@@ -2849,6 +2857,7 @@ function render(){
   document.getElementById('statPendingPCA').textContent = pendingPCA;
   document.getElementById('statPendingBK').textContent = pendingBK;
   document.getElementById('statPendingTAX').textContent = pendingTAX;
+  document.getElementById('statPendingPay').textContent = pendingPay;
 
   const overall = total ? Math.round((sumProg/total)*100) : 0;
   document.getElementById('overallPct').textContent = overall + '%';
@@ -2873,7 +2882,7 @@ function render(){
 // Recompute the summary cards and ring from all rows (cheap: no table redraw).
 function updateStats(){
   const rows = currentRows();
-  let total=0, complete=0, zero=0, inprog=0, sumProg=0, pendingPCA=0, pendingBK=0, pendingTAX=0, nIn=0, nOut=0, nLead=0;
+  let total=0, complete=0, zero=0, inprog=0, sumProg=0, pendingPCA=0, pendingBK=0, pendingTAX=0, pendingPay=0, nIn=0, nOut=0, nLead=0;
   rows.forEach(function(row){
     if(isNewThisMonth(row)) nIn++;
     if(row.stopped_from && row.stopped_from === state.current) nOut++;
@@ -2885,6 +2894,7 @@ function updateStats(){
     if(groupProgress(row, GROUPS.pca) < 0.999) pendingPCA++;
     if(groupProgress(row, GROUPS.bk) < 0.999) pendingBK++;
     if(groupProgress(row, GROUPS.tax) < 0.999) pendingTAX++;
+    if(!isDoneVal('tax_payment', row.tax_payment)) pendingPay++;
   });
   document.getElementById('statTotal').textContent = total;
   document.getElementById('statComplete').textContent = complete;
@@ -2892,6 +2902,7 @@ function updateStats(){
   document.getElementById('statPendingPCA').textContent = pendingPCA;
   document.getElementById('statPendingBK').textContent = pendingBK;
   document.getElementById('statPendingTAX').textContent = pendingTAX;
+  document.getElementById('statPendingPay').textContent = pendingPay;
   const overall = total ? Math.round((sumProg/total)*100) : 0;
   document.getElementById('overallPct').textContent = overall + '%';
   document.getElementById('ringProg').style.strokeDashoffset = 194.8 - (overall/100)*194.8;
@@ -3371,7 +3382,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
 
 
 // ---- Pending drill-down popup (double-click PCA / BK / TAX Pending cards) ----
-const PM_GROUP_NAMES = {pca:'PCA', bk:'BK', tax:'TAX', inout:'Clients In / Out'};
+const PM_GROUP_NAMES = {pca:'PCA', bk:'BK', tax:'TAX', taxpay:'Tax Payment', inout:'Clients In / Out'};
 let pmCurrentGroup = null;
 let pmLastShown = [];
 function pmEsc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
