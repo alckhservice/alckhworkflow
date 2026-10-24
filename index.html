@@ -990,6 +990,10 @@
   .xSel.rcSel.rc-ready{background:color-mix(in srgb, var(--warn) 20%, var(--neu-bg)); color:var(--warn);}
   .xSel.rcSel.rc-returned{background:color-mix(in srgb, var(--bad) 16%, var(--neu-bg)); color:var(--bad);}
   .xSel.rcSel.rc-done{background:color-mix(in srgb, var(--ok) 16%, var(--neu-bg)); color:var(--ok);}
+  /* DN: Request DN = red (waiting for the DN issuer), DN Sent = green */
+  .xSel.dnSel.dn-request{background:var(--bad); color:#fff; font-weight:700;}
+  .xSel.dnSel.dn-sent{background:var(--ok); color:#fff; font-weight:700;}
+  .xSel.dnSel.dn-request option, .xSel.dnSel.dn-sent option{font-weight:400;}
   .textSel.awaiting{box-shadow:var(--press-sm), 0 0 0 2px var(--warn); animation:rcPulse 1.8s ease-in-out infinite;}
   .textSel.awaiting::placeholder{color:var(--warn); opacity:1; font-weight:700;}
   @keyframes rcPulse{50%{box-shadow:var(--press-sm), 0 0 0 4px color-mix(in srgb, var(--warn) 30%, transparent);}}
@@ -2475,7 +2479,7 @@ function xSelect(opts, field, v, idx, locked, title){
 }
 function pkgSelect(row, idx, locked){ return xSelect(PKG_OPTS, 'pkg', row.pkg || '', idx, locked, 'Service package'); }
 function bankRptSelect(row, idx, locked){ return xSelect(BANKRPT_OPTS, 'bank_report', row.bank_report || '', idx, locked, 'Bank reconcile report'); }
-function dnSelect(row, idx, locked){ return xSelect(DN_OPTS, 'dn', row.dn || '', idx, locked, 'Debit note (DN)'); }
+function dnSelect(row, idx, locked){ return xSelect(DN_OPTS, 'dn', row.dn || '', idx, locked, 'Debit note (DN)').replace('<select class="xSel', '<select class="xSel dnSel dn-' + (row.dn || 'none')); }
 // Summary card: active companies (stopped and leads excluded) counted by package.
 function updatePkgCounts(){
   const n = {tax:0, bk:0, waste:0};
@@ -2987,6 +2991,7 @@ function attachRowEvents(){
       const prev = row[field];
       if(el.value) row[field] = el.value; else delete row[field];
       el.classList.toggle('filled', !!el.value);
+      if(field === 'dn'){ el.classList.remove('dn-none', 'dn-request', 'dn-sent'); el.classList.add('dn-' + (el.value || 'none')); }
       if(field === 'pkg') updatePkgCounts();
       if(field === 'pkg' && document.getElementById('filterPkg').value){ renderView(); } // row may leave the filtered view
       saveCell(idx, field, prev);
