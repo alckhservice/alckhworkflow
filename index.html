@@ -990,9 +990,9 @@
   .xSel.rcSel.rc-ready{background:color-mix(in srgb, var(--warn) 20%, var(--neu-bg)); color:var(--warn);}
   .xSel.rcSel.rc-returned{background:color-mix(in srgb, var(--bad) 16%, var(--neu-bg)); color:var(--bad);}
   .xSel.rcSel.rc-done{background:color-mix(in srgb, var(--ok) 16%, var(--neu-bg)); color:var(--ok);}
-  /* DN: Request DN = red (waiting for the DN issuer), DN Sent = green */
+  /* DN: Request DN = red (waiting for the DN issuer), DN Sent = accent colour, like Separate Bill "Sent" */
   .xSel.dnSel.dn-request{background:var(--bad); color:#fff; font-weight:700;}
-  .xSel.dnSel.dn-sent{background:var(--ok); color:#fff; font-weight:700;}
+  .xSel.dnSel.dn-sent{background:var(--brand); background-image:var(--neon); color:#fff; box-shadow:var(--glow-sm); font-weight:600;} /* same accent as Separate Bill: Sent */
   .xSel.dnSel.dn-request option, .xSel.dnSel.dn-sent option{font-weight:400;}
   .textSel.awaiting{box-shadow:var(--press-sm), 0 0 0 2px var(--warn); animation:rcPulse 1.8s ease-in-out infinite;}
   .textSel.awaiting::placeholder{color:var(--warn); opacity:1; font-weight:700;}
