@@ -2622,13 +2622,17 @@ window.addEventListener('resize', function(){ if(soEl) soPaint(); });
 // The 13 checklist items. Plan Finish / Actual Finish are dates, not tasks, so they are
 // kept out of progress % and out of the status columns of the Excel export/import.
 const TASK_COLS = COLS.filter(function(c){ return !!DROPDOWN_COLS[c.key]; });
-// Fully done = every task column is done AND the month is signed off (Review By and Confirmed By filled in).
+// Columns that count toward Progress % and Overall % (and so "Fully done"):
+//   PCA: Import, Export · BK: G.P (13.14.15), G.P (16.17.18.27), VAT 0%, Salary · TAX: Separate Bill, E-filing, Tax Payment.
+// FA, Sales 0% & CMT, Inventory Adj and Bank reconcile are still tracked but do not change the percentage.
+const PROGRESS_KEYS = ['import_', 'export', 'gp1', 'gp2', 'vat0', 'salary', 'bill_sent', 'efiling', 'tax_payment'];
+// Fully done = every progress column is done AND the month is signed off (Review By and Confirmed By filled in).
 function isFullyDone(row, prog){
   return prog >= 0.999 && !!row.review_by && !!row.confirmed_by;
 }
-document.getElementById('statCompleteLabel').textContent = 'FULLY DONE (' + TASK_COLS.length + ' TASKS + SIGN-OFF)';
+document.getElementById('statCompleteLabel').textContent = 'FULLY DONE (' + PROGRESS_KEYS.length + ' TASKS + SIGN-OFF)';
 document.getElementById('statCompleteLabel').parentNode.title =
-  'All ' + TASK_COLS.length + ' task columns done, and Review By and Confirmed By filled in';
+  'All ' + PROGRESS_KEYS.length + ' progress columns done (Import, Export, both G.P, VAT 0%, Salary, Separate Bill, E-filing, Tax Payment), and Review By and Confirmed By filled in';
 
 const GROUPS = {
   pca: ['import_', 'export'],
@@ -2652,10 +2656,9 @@ function groupProgress(row, keys){
 
 function rowProgress(row){
   let total = 0, done = 0;
-  TASK_COLS.forEach(function(c){
-    const v = row[c.key];
+  PROGRESS_KEYS.forEach(function(key){
     total++;
-    if(isDoneVal(c.key, v)) done++;
+    if(isDoneVal(key, row[key])) done++;
   });
   return total > 0 ? (done / total) : 1;
 }
