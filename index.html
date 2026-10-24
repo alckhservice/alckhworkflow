@@ -1218,14 +1218,14 @@
     <div class="tablescroll">
     <table>
       <colgroup>
-        <col style="width:13.6%;">
-        <col style="width:8.6%;">
+        <col style="width:11.8%;">
+        <col style="width:7.2%;">
         <col style="width:5.1%;">
         <col style="width:5.1%;">
         <col style="width:4.2%;">
         <col style="width:4.2%;">
         <col style="width:4.6%;">
-        <col style="width:5.6%;">
+        <col style="width:5%;">
         <col style="width:4.2%;">
         <col style="width:3.6%;">
         <col style="width:4.6%;">
@@ -1233,13 +1233,14 @@
         <col style="width:4.2%;">
         <col style="width:5%;">
         <col style="width:5%;">
+        <col style="width:4.3%;">
         <col style="width:4.6%;">
+        <col style="width:4.3%;">
+        <col style="width:4.6%;">
+        <col style="width:4.2%;">
         <col style="width:4.6%;">
         <col style="width:4.8%;">
-        <col style="width:6%;">
-        <col style="width:4.3%;">
-        <col style="width:4.6%;">
-        <col style="width:4.3%;">
+        <col style="width:5.6%;">
         <col style="width:3%;">
       </colgroup>
       <thead>
@@ -1249,9 +1250,9 @@
           <th colspan="2"><span>Client Progress</span></th>
           <th colspan="2"><span>PCA</span></th>
           <th colspan="9"><span>BK</span></th>
-          <th colspan="3"><span>TAX</span></th>
-          <th></th>
           <th colspan="3"><span>Sign-off</span></th>
+          <th colspan="4"><span>TAX</span></th>
+          <th></th>
           <th></th>
         </tr>
         <tr class="cols">
@@ -1270,19 +1271,20 @@
           <th>Salary</th>
           <th>Bank<br>reconcile</th>
           <th>Bank<br>report</th>
-          <th>E-filing</th>
-          <th>Separate<br>Bill</th>
-          <th>Tax<br>Payment</th>
-          <th class="prog-h">Progress</th>
           <th class="signoff-h">Review<br>By</th>
           <th class="signoff-h" title="Reviewer marks Ready so the manager knows to confirm">Send to<br>Manager</th>
           <th class="signoff-h">Confirmed<br>By</th>
+          <th>Separate<br>Bill</th>
+          <th title="Debit note (DN)">DN</th>
+          <th>E-filing</th>
+          <th>Tax<br>Payment</th>
+          <th class="prog-h">Progress</th>
           <th></th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
       <tfoot>
-        <tr><td colspan="23"><button class="addrow-btn" id="btnAddRow2">+ add another company row</button></td></tr>
+        <tr><td colspan="24"><button class="addrow-btn" id="btnAddRow2">+ add another company row</button></td></tr>
       </tfoot>
     </table>
     </div>
@@ -1900,7 +1902,7 @@ const myRecent = {};  // cellKey -> when this computer last changed that cell
 let staffName = '';      // the signed-in person's name from the staff list
 let isAdminUser = false; // may manage the staff list
 const FIELD_NAMES = {name: 'Company name', stopped_from: 'Stopped from', engaged_from: 'Engaged from',
-                     lead_from: 'Lead since', review_check: 'Send to Manager', '(added)': 'Company added', '(removed)': 'Company removed',
+                     lead_from: 'Lead since', review_check: 'Send to Manager', dn: 'DN', '(added)': 'Company added', '(removed)': 'Company removed',
                      months: 'Month list', locked: 'Past month editing'};
 function currentUser(){ try{ return localStorage.getItem(WHO_KEY) || ''; }catch(e){ return ''; } }
 function whoLabel(){ return staffName || currentUser() || 'Unknown'; }
@@ -1912,6 +1914,7 @@ function fieldLabel(f){
 function fmtVal(f, v){
   if(v === undefined || v === null || v === '') return '—';
   if(f === 'review_check') return ({ready:'Ready – sent to manager', returned:'Returned – needs fixing'})[v] || String(v);
+  if(f === 'dn') return v === 'request' ? 'Request DN' : String(v);
   const d = DROPDOWN_COLS[f];
   if(d) return valLabel(f, v);
   if(typeof v === 'boolean') return v ? 'Done' : '—';
@@ -2460,6 +2463,8 @@ const PKG_OPTS = [
   {v:'bk_tax_4', l:'4. BK + Tax'}
 ];
 const BANKRPT_OPTS = [{v:'sent', l:'1. Report sent'}, {v:'notsent', l:'2. Not yet sent'}];
+// DN (debit note): plain dropdown shown in the TAX group between Separate Bill and E-filing.
+const DN_OPTS = [{v:'request', l:'Request DN'}];
 // Summary card groups: option 4 is counted under BK + Tax.
 const PKG_GROUP = {tax:'tax', bk_tax:'bk', bk_tax_4:'bk', bk_tax_waste:'waste'};
 function xSelect(opts, field, v, idx, locked, title){
@@ -2469,6 +2474,7 @@ function xSelect(opts, field, v, idx, locked, title){
 }
 function pkgSelect(row, idx, locked){ return xSelect(PKG_OPTS, 'pkg', row.pkg || '', idx, locked, 'Service package'); }
 function bankRptSelect(row, idx, locked){ return xSelect(BANKRPT_OPTS, 'bank_report', row.bank_report || '', idx, locked, 'Bank reconcile report'); }
+function dnSelect(row, idx, locked){ return xSelect(DN_OPTS, 'dn', row.dn || '', idx, locked, 'Debit note (DN)'); }
 // Summary card: active companies (stopped and leads excluded) counted by package.
 function updatePkgCounts(){
   const n = {tax:0, bk:0, waste:0};
@@ -2785,8 +2791,9 @@ function render(){
       return '<td class="grouppct ' + cls + '">' + pct + '%</td>';
     }
     tds += '<td>' + pkgSelect(row, idx, locked) + '</td>'; // Package sits right after Company
+    const cell = {}; // task cells by column key; emitted below in screen order
     COLS.forEach(c => {
-      if(c.key === 'efiling') tds += '<td>' + bankRptSelect(row, idx, locked) + '</td>'; // Bank report sits right after Bank reconcile
+      let tds = '';
       // Handle new client progress fields (dates and percentage)
       if(c.key === 'plan_finish'){
         tds += '<td>' + getDateDropdown(row.plan_finish || '', idx, 'plan_finish', locked, row) + '</td>';
@@ -2804,14 +2811,19 @@ function render(){
           tds += '<td><span class="chk ' + (row[c.key] ? 'done':'') + ' ' + (locked?'readonly':'') + '" data-idx="' + idx + '" data-field="' + c.key + '">' + (row[c.key] ? '&#10003;':'') + '</span></td>';
         }
       }
+      cell[c.key] = tds;
     });
+    // Screen order: … Bank reconcile, Bank report | Sign-off | TAX: Separate Bill, DN, E-filing, Tax Payment | Progress
+    COLS.forEach(function(c){ if(c.key !== 'efiling' && c.key !== 'bill_sent' && c.key !== 'tax_payment') tds += cell[c.key]; });
+    tds += '<td>' + bankRptSelect(row, idx, locked) + '</td>'; // Bank report sits right after Bank reconcile
+    tds += '<td>' + signoffSelect(SIGNOFF_COLS[0], row.review_by, idx, locked) + '</td>';
+    tds += '<td>' + reviewCheckSelect(row, idx, locked) + '</td>';
+    tds += '<td>' + signoffSelect(SIGNOFF_COLS[1], row.confirmed_by, idx, locked) + '</td>';
+    tds += cell.bill_sent + '<td>' + dnSelect(row, idx, locked) + '</td>' + cell.efiling + cell.tax_payment;
     const pctDisplay = Math.round(prog*100);
     if(lead) tds += '<td class="prog"><span class="lead-tag" title="Lead registered in ' + escapeAttr(row.lead_from) + '">Lead &middot; not confirmed</span></td>';
     else if(stopped) tds += '<td class="prog"><span class="stopped-tag" title="Stopped engaged from ' + escapeAttr(row.stopped_from) + '">Stopped from ' + escapeAttr(shortMonth(row.stopped_from)) + '</span></td>';
     else tds += '<td class="prog"><div class="progcell"><div class="bar"><span style="width:' + pctDisplay + '%"></span></div><span class="pct">' + pctDisplay + '%</span></div></td>';
-    tds += '<td>' + signoffSelect(SIGNOFF_COLS[0], row.review_by, idx, locked) + '</td>';
-    tds += '<td>' + reviewCheckSelect(row, idx, locked) + '</td>';
-    tds += '<td>' + signoffSelect(SIGNOFF_COLS[1], row.confirmed_by, idx, locked) + '</td>';
     const toggle = pageLocked ? '' : lead
       ? '<span class="eng-toggle" data-idx="' + idx + '" data-confirm="1" title="Confirm as new client engaged in ' + escapeAttr(state.current) + '">&#10004;</span>'
       : (stopped
@@ -3207,7 +3219,7 @@ function exportSchedule(rows, opts){
   aoa.push([]);
   const HDR = aoa.length; // group-header row; the column-header row follows it
   aoa.push(['Company','PCA',null,null,'BK',null,null,null,null,null,null,null,null,'TAX',null,null,null,'Progess']);
-  aoa.push([null,'Import','Export','PCA %','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','BK %','E-filling','Separate Bill','Tax Payment','TAX %',null,'Plan Finish','Actual Finish Date','Review By','Confirmed By','Engagement','Send to Manager'].concat(opts.extra ? [opts.extra.label] : []));
+  aoa.push([null,'Import','Export','PCA %','G.P (13.14.15)','G.P (16.17.18.27)','VAT 0% ','FA','Sales 0% & CMT','Inventory Adj','Salary','Bank reconcile','BK %','E-filling','Separate Bill','Tax Payment','TAX %',null,'Plan Finish','Actual Finish Date','Review By','Confirmed By','Engagement','Send to Manager','DN'].concat(opts.extra ? [opts.extra.label] : []));
   rows.forEach(function(row, ri){
     const line = [row.name];
     TASK_COLS.forEach(function(c){
@@ -3219,7 +3231,7 @@ function exportSchedule(rows, opts){
       else if(c.key === 'tax_payment') line.push(Math.round(groupProgress(row, GROUPS.tax)*10000)/10000);
     });
     line.push(Math.round(rowProgress(row)*10000)/10000);
-    line.push(row.plan_finish || '', row.actual_finish || '', row.review_by || '', row.confirmed_by || '', engagementText(row), fmtVal('review_check', row.review_check).replace('—', ''));
+    line.push(row.plan_finish || '', row.actual_finish || '', row.review_by || '', row.confirmed_by || '', engagementText(row), fmtVal('review_check', row.review_check).replace('—', ''), row.dn === 'request' ? 'Request DN' : '');
     if(opts.extra) line.push(opts.extra.values[ri] || '');
     aoa.push(line);
   });
@@ -3232,7 +3244,7 @@ function exportSchedule(rows, opts){
     {s:{r:HDR,c:13},e:{r:HDR,c:16}}
   ];
   const oc = ws[XLSX.utils.encode_cell({r:3, c:11})]; if(oc) oc.z = '0%';
-  ws['!cols'] = [{wch:52}].concat(new Array(16).fill({wch:11})).concat([{wch:10},{wch:13},{wch:16},{wch:14},{wch:14},{wch:34},{wch:22}]).concat(opts.extra ? [{wch:50}] : []);
+  ws['!cols'] = [{wch:52}].concat(new Array(16).fill({wch:11})).concat([{wch:10},{wch:13},{wch:16},{wch:14},{wch:14},{wch:34},{wch:22},{wch:12}]).concat(opts.extra ? [{wch:50}] : []);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, state.current.slice(0,31) || 'Schedule');
   const fname = ('ALCKH_' + state.current + (opts.suffix ? ' ' + opts.suffix : '')).replace(/[^a-z0-9 _-]/gi,'') + '.xlsx';
@@ -3294,6 +3306,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
       let start = 4, hdrLine = []; // older files: headers on rows 3-4
       for(let h = 0; h < Math.min(aoa.length, 15); h++){ const l = aoa[h] || []; if(l[1] === 'Import' && l[2] === 'Export'){ start = h + 1; hdrLine = l; break; } }
       const rcCol = hdrLine.indexOf('Send to Manager'); // only in files exported after this column was added
+      const dnCol = hdrLine.indexOf('DN');              // only in files exported after the DN column was added
       for(let r=start; r<aoa.length; r++){
         const line = aoa[r];
         if(!line || !line[0]) continue;
@@ -3324,6 +3337,7 @@ document.getElementById('fileInput').addEventListener('change', function(e){
         if((em = eng.match(/stopped engaged from\s+(.+)/i))) row.stopped_from = em[1].trim();
         else if((em = eng.match(/new engaged(?:\s+in)?\s+(.+)/i))) row.engaged_from = em[1].trim();
         else if((em = eng.match(/lead \(not confirmed\) since\s+(.+)/i))) row.lead_from = em[1].trim();
+        if(dnCol > 0 && /request/i.test(String(line[dnCol] || ''))) row.dn = 'request';
         if(rcCol > 0){ const rc = String(line[rcCol] || '').toLowerCase(); if(rc.indexOf('ready') === 0) row.review_check = 'ready'; else if(rc.indexOf('return') === 0) row.review_check = 'returned'; }
         newRows.push(row);
       }
@@ -3746,14 +3760,15 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
   const $ = function(id){ return document.getElementById(id); };
   // Column order of the table header row.
   const HEAD_KEYS = [null, 'pkg', 'plan_finish', 'actual_finish', 'import_', 'export', 'gp1', 'gp2', 'vat0', 'fa', 'sales0cmt', 'invadj',
-                     'salary', 'bankrec', 'bank_report', 'efiling', 'bill_sent', 'tax_payment',
-                     'progress', 'review_by', 'review_check', 'confirmed_by', null];
+                     'salary', 'bankrec', 'bank_report', 'review_by', 'review_check', 'confirmed_by',
+                     'bill_sent', 'dn', 'efiling', 'tax_payment', 'progress', null];
   const colFilters = {};   // key -> option value
   window.colFilters = colFilters;
 
   function label(key){
     if(key === 'pkg') return 'Package';
     if(key === 'bank_report') return 'Bank report';
+    if(key === 'dn') return 'DN';
     if(key === 'progress') return 'Progress';
     if(key === 'review_check') return 'Send to Manager';
     const so = SIGNOFF_COLS.find(function(x){ return x.key === key; }); if(so) return so.label;
@@ -3772,8 +3787,8 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
       });
       return list;
     }
-    if(key === 'pkg' || key === 'bank_report'){
-      const opts = key === 'pkg' ? PKG_OPTS : BANKRPT_OPTS;
+    if(key === 'pkg' || key === 'bank_report' || key === 'dn'){
+      const opts = key === 'pkg' ? PKG_OPTS : key === 'dn' ? DN_OPTS : BANKRPT_OPTS;
       return opts.map(function(o){ return {v:o.v, l:o.l, test:function(r){ return r[key] === o.v; }}; })
         .concat([{v:'__blank', l:'(not set)', test:function(r){ return !r[key]; }}]);
     }
